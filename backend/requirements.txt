@@ -1,0 +1,6 @@
+# Core dependency - the cmbagent framework (pip install mars_cmbagent -> import cmbagent)
+--find-links ../dist
+mars_cmbagent==1.0.0
+
+# Additional backend dependencies
+python-dotenv>=1.0.0

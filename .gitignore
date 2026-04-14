@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.production
+.env*.local
+
+# Build
+.next/
+out/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Cache
+.cache/
+*.cache
+
+# Work directories
+mars_cmbdir*/
+cmbdir*/
+cmbagent_*/
+
+# Test & Coverage
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/

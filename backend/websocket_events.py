@@ -9,6 +9,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import datetime
+from datetime import timezone
 
 
 class WebSocketEventType(str, Enum):
@@ -81,7 +82,7 @@ class WebSocketEventType(str, Enum):
 class WebSocketEvent(BaseModel):
     """Base WebSocket event"""
     event_type: WebSocketEventType
-    timestamp: datetime.datetime = Field(default_factory=lambda: datetime.datetime.utcnow())
+    timestamp: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(timezone.utc))
     run_id: Optional[str] = None
     session_id: Optional[str] = None
     data: Dict[str, Any] = Field(default_factory=dict)
@@ -215,7 +216,7 @@ class MetricUpdateData(BaseModel):
     metric_name: str
     value: float
     unit: str
-    timestamp: datetime.datetime = Field(default_factory=lambda: datetime.datetime.utcnow())
+    timestamp: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(timezone.utc))
 
 
 class FileCreatedData(BaseModel):
@@ -283,7 +284,7 @@ def create_workflow_started_event(run_id: str, task_description: str, agent: str
     )
 
 
-def create_workflow_state_changed_event(run_id: str, status: str, started_at: Optional[datetime] = None, completed_at: Optional[datetime] = None, error: Optional[str] = None) -> WebSocketEvent:
+def create_workflow_state_changed_event(run_id: str, status: str, started_at: Optional[datetime.datetime] = None, completed_at: Optional[datetime.datetime] = None, error: Optional[str] = None) -> WebSocketEvent:
     """Create a workflow_state_changed event"""
     return WebSocketEvent(
         event_type=WebSocketEventType.WORKFLOW_STATE_CHANGED,
@@ -294,6 +295,15 @@ def create_workflow_state_changed_event(run_id: str, status: str, started_at: Op
             completed_at=completed_at.isoformat() if completed_at else None,
             error=error
         ).dict()
+    )
+
+
+def create_workflow_completed_event(run_id: str, results: Dict[str, Any] = None) -> WebSocketEvent:
+    """Create a workflow_completed event"""
+    return WebSocketEvent(
+        event_type=WebSocketEventType.WORKFLOW_COMPLETED,
+        run_id=run_id,
+        data={"results": results or {}}
     )
 
 

@@ -289,35 +289,25 @@ class ConnectionManager:
                 return False
             websocket = self._connections[task_id]
 
-        try:
-            await websocket.send_json(data)
-            return True
-        except Exception as e:
-            logger.warning("Failed to send JSON to %s: %s", task_id, e)
-            await self.disconnect(task_id)
-            return False
+            try:
+                await websocket.send_json(data)
+                return True
+            except Exception as e:
+                logger.warning("Failed to send JSON to %s: %s", task_id, e)
+
+        # Disconnect outside lock to avoid deadlock
+        await self.disconnect(task_id)
+        return False
 
     # ==================== Convenience Methods ====================
 
     async def send_output(self, task_id: str, message: str):
         """Send output message"""
-        event = WebSocketEvent(
-            event_type=WebSocketEventType.OUTPUT,
-            timestamp=datetime.now(timezone.utc),
-            run_id=task_id,
-            data={"message": message}
-        )
-        await self.send_event(task_id, event)
+        await self.send_event(task_id, "output", {"message": message})
 
     async def send_status(self, task_id: str, status: str, message: str = None):
         """Send status update"""
-        event = WebSocketEvent(
-            event_type=WebSocketEventType.WORKFLOW_STATE_CHANGED,
-            timestamp=datetime.now(timezone.utc),
-            run_id=task_id,
-            data={"status": status, "message": message or status}
-        )
-        await self.send_event(task_id, event)
+        await self.send_event(task_id, "workflow_state_changed", {"status": status, "message": message or status})
 
     async def send_error(self, task_id: str, error_type: str, message: str, traceback: str = None):
         """Send error event"""
@@ -338,13 +328,7 @@ class ConnectionManager:
 
     async def send_pong(self, task_id: str):
         """Send pong response (not queued)"""
-        event = WebSocketEvent(
-            event_type=WebSocketEventType.PONG,
-            timestamp=datetime.now(timezone.utc),
-            run_id=task_id,
-            data={}
-        )
-        await self.send_event(task_id, event, queue_if_disconnected=False)
+        await self.send_event(task_id, "pong", {}, queue_if_disconnected=False)
 
     async def send_workflow_started(
         self,

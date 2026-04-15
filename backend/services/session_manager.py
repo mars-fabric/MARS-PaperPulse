@@ -334,7 +334,8 @@ class SessionManager:
         db = self.db_factory()
         try:
             result = db.query(SessionState).filter(
-                SessionState.session_id == session_id
+                SessionState.session_id == session_id,
+                SessionState.status.in_(["active", "suspended"])
             ).update({
                 "status": "completed",
                 "updated_at": datetime.now(timezone.utc)
@@ -345,6 +346,8 @@ class SessionManager:
             if result > 0:
                 logger.info("Completed session %s", session_id)
                 return True
+            else:
+                logger.warning("No active/suspended session to complete: %s", session_id)
             return False
 
         except Exception as e:
@@ -432,7 +435,9 @@ class SessionManager:
 
             # SessionState can contain multiple rows per session over time.
             # Keep only the newest row per session so the UI reflects latest task state.
+            # Apply a generous SQL LIMIT to bound memory usage, then deduplicate in Python.
             query = query.order_by(SessionState.updated_at.desc(), Session.created_at.desc())
+            query = query.limit(limit * 3)  # Over-fetch to account for deduplication
 
             results = []
             seen_sessions = set()
@@ -499,6 +504,9 @@ class SessionManager:
                 "config": session.meta,
             }
 
+        except Exception as e:
+            logger.error("Failed to get session info for %s: %s", session_id, e)
+            return None
         finally:
             db.close()
 

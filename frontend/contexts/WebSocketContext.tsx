@@ -6,7 +6,12 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import { useEventHandler } from '@/hooks/useEventHandler';
 import { WebSocketEvent, DAGCreatedData, DAGNodeStatusChangedData, ApprovalRequestedData, DAGNodeData, DAGEdgeData, CostUpdateData, FilesUpdatedData, AgentMessageData } from '@/types/websocket-events';
 import { getWsUrl, getApiUrl } from '@/lib/config';
+import { config } from '@/lib/config';
 import { CostSummary, CostTimeSeries, ModelCost, AgentCost, StepCost } from '@/types/cost';
+
+/** Debug-guarded logger: only outputs in debug mode */
+const debugLog = (...args: unknown[]) => { if (config.debug) console.log(...args); };
+const debugWarn = (...args: unknown[]) => { if (config.debug) console.warn(...args); };
 
 interface WebSocketContextValue {
   // Connection state
@@ -127,6 +132,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
   const shouldReconnect = useRef<boolean>(false);
   const lastMessageTimestamp = useRef<number>(Date.now());
+  // Use a ref for reconnect attempts to avoid stale closure in onclose handler
+  const reconnectAttemptRef = useRef<number>(0);
   // Store task and config for reconnection
   const taskDataRef = useRef<{ task: string; config: any } | null>(null);
 
@@ -377,7 +384,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
         }
 
-        console.log('📊 Updated Cost Summary:', {
+        debugLog('Updated Cost Summary:', {
           model_breakdown_count: newModelBreakdown.length,
           agent_breakdown_count: newAgentBreakdown.length,
           models: newModelBreakdown.map(m => m.model)
@@ -448,7 +455,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     shouldReconnect.current = true;
 
     const wsUrl = getWsUrl(`/ws/${taskId}`);
-    console.log(`[WebSocket] Connecting to ${wsUrl}...`);
+    debugLog(`[WebSocket] Connecting to ${wsUrl}...`);
 
     return new Promise<void>((resolve, reject) => {
       try {
@@ -456,9 +463,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log('[WebSocket] Connected');
+          debugLog('[WebSocket] Connected');
           setConnected(true);
           setIsConnecting(false);
+          reconnectAttemptRef.current = 0;
           setReconnectAttempt(0);
           setLastError(null);
           addConsoleOutput('🔌 WebSocket connected');
@@ -519,19 +527,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         };
 
         ws.onclose = (event) => {
-          console.log(`[WebSocket] Closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
+          debugLog(`[WebSocket] Closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
           setConnected(false);
           setIsConnecting(false);
           stopHeartbeat();
           addConsoleOutput('🔌 WebSocket disconnected');
 
           // Handle reconnection with exponential backoff
-          if (shouldReconnect.current && reconnectAttempt < 10) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000);
-            console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempt + 1})`);
+          // Use ref to get fresh attempt count (avoids stale closure)
+          const currentAttempt = reconnectAttemptRef.current;
+          if (shouldReconnect.current && currentAttempt < 10) {
+            const delay = Math.min(1000 * Math.pow(2, currentAttempt), 30000);
+            debugLog(`[WebSocket] Reconnecting in ${delay}ms (attempt ${currentAttempt + 1})`);
 
             reconnectTimeoutRef.current = setTimeout(() => {
-              setReconnectAttempt(prev => prev + 1);
+              reconnectAttemptRef.current += 1;
+              setReconnectAttempt(reconnectAttemptRef.current);
               // Re-establish connection
               if (wsRef.current === null || wsRef.current.readyState === WebSocket.CLOSED) {
                 const newWs = new WebSocket(wsUrl);
@@ -539,13 +550,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                 newWs.onopen = () => {
                   setConnected(true);
+                  reconnectAttemptRef.current = 0;
                   setReconnectAttempt(0);
                   setLastError(null);
                   addConsoleOutput('🔌 WebSocket reconnected');
 
                   // Resend task data on reconnection
                   if (taskDataRef.current) {
-                    console.log('[WebSocket] Resending task data on reconnection');
+                    debugLog('[WebSocket] Resending task data on reconnection');
                     newWs.send(JSON.stringify(taskDataRef.current));
                   }
 
@@ -557,7 +569,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 newWs.onclose = ws.onclose;
               }
             }, delay);
-          } else if (reconnectAttempt >= 10) {
+          } else if (currentAttempt >= 10) {
             setLastError('Max reconnection attempts reached');
           }
         };
@@ -570,7 +582,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         reject(error);
       }
     });
-  }, [addConsoleOutput, handleEvent, reconnectAttempt, startHeartbeat, stopHeartbeat]);
+  }, [addConsoleOutput, handleEvent, startHeartbeat, stopHeartbeat]);
 
   // Send message
   const sendMessage = useCallback((message: any) => {
@@ -588,7 +600,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
   // Disconnect
   const disconnect = useCallback(() => {
-    console.log('[WebSocket] Manual disconnect');
+    debugLog('[WebSocket] Manual disconnect');
     shouldReconnect.current = false;
 
     if (reconnectTimeoutRef.current) {
@@ -605,21 +617,25 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     setConnected(false);
     setIsConnecting(false);
+    reconnectAttemptRef.current = 0;
     setReconnectAttempt(0);
     setLastError(null);
   }, [stopHeartbeat]);
 
-  // Reconnect
+  // Reconnect using stored task data
   const reconnect = useCallback(() => {
-    console.log('[WebSocket] Manual reconnect');
-    if (currentRunId) {
+    debugLog('[WebSocket] Manual reconnect');
+    if (currentRunId && taskDataRef.current) {
       disconnect();
       shouldReconnect.current = true;
+      reconnectAttemptRef.current = 0;
       setReconnectAttempt(0);
-      // Note: Reconnection requires the original task/config which we don't have
-      // This is mainly for UI purposes to show reconnection intent
+      // Actually reconnect using stored task/config
+      connect(currentRunId, taskDataRef.current.task, taskDataRef.current.config).catch((err) => {
+        console.error('[WebSocket] Reconnect failed:', err);
+      });
     }
-  }, [currentRunId, disconnect]);
+  }, [currentRunId, disconnect, connect]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -627,6 +643,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       shouldReconnect.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      // Clear pending console flush timer to prevent setState on unmounted component
+      if (consoleFlushTimerRef.current) {
+        clearTimeout(consoleFlushTimerRef.current);
+        consoleFlushTimerRef.current = null;
       }
       stopHeartbeat();
       if (wsRef.current) {
@@ -637,24 +658,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   }, [stopHeartbeat]);
 
   // Session management (Stage 11)
+  // NOTE: These are retained for interface compatibility but are not used
+  // in the Deepresearch standalone flow. Task resume is handled via
+  // GET /api/deepresearch/{task_id} and re-executing stages.
   const resumeSession = useCallback(async (sessionId: string, additionalContext?: string) => {
     try {
-      // Load session info to get config
-      const response = await fetch(getApiUrl(`/api/sessions/${sessionId}`));
-      if (!response.ok) throw new Error("Failed to load session");
+      // In Deepresearch-only mode, task resume uses GET /api/deepresearch/{taskId}
+      // followed by re-executing the next incomplete stage.
+      const response = await fetch(getApiUrl(`/api/deepresearch/${sessionId}`));
+      if (!response.ok) throw new Error("Failed to load task state for session resume");
 
-      const session = await response.json();
+      const taskState = await response.json();
 
-      // Resume the session via API
-      await fetch(getApiUrl(`/api/sessions/${sessionId}/resume`), { method: "POST" });
-
-      // Generate a task ID and connect with session context
-      const taskId = `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      await connect(taskId, additionalContext || "Continue the previous session.", {
-        ...session.config,
+      // Connect with the task's existing context
+      await connect(sessionId, additionalContext || taskState.task || "Continue the previous session.", {
         copilotSessionId: sessionId,
         additionalContext: additionalContext || "",
-        mode: session.mode,
+        mode: "deepresearch-research",
       });
 
       setCopilotSessionId(sessionId);
@@ -665,8 +685,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   }, [connect, setCopilotSessionId]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
-    const response = await fetch(getApiUrl(`/api/sessions/${sessionId}/history`));
-    if (!response.ok) throw new Error("Failed to load history");
+    // In Deepresearch-only mode, return task state as history proxy
+    const response = await fetch(getApiUrl(`/api/deepresearch/${sessionId}`));
+    if (!response.ok) throw new Error("Failed to load task state");
     return response.json();
   }, []);
 

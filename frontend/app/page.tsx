@@ -1,56 +1,63 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { FileText, ArrowRight, X } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { FileText, Sparkles, Upload, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import TopBar from '@/components/layout/TopBar'
+import SessionSidebar from '@/components/sessions/SessionSidebar'
+import type { SessionItem } from '@/components/sessions/SessionSidebar'
 import DeepresearchResearchTask from '@/components/tasks/DeepresearchResearchTask'
 import { getApiUrl } from '@/lib/config'
 
-interface RecentTask {
-  task_id: string
-  task: string
-  status: string
-  created_at: string | null
-  current_stage: number | null
-  progress_percent: number
-}
-
-const STAGE_NAMES: Record<number, string> = {
-  1: 'Idea Generation',
-  2: 'Method Development',
-  3: 'Experiment',
-  4: 'Paper',
-}
-
 export default function Home() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<SessionItem[]>([])
   const [showTask, setShowTask] = useState(false)
-  const [recentTasks, setRecentTasks] = useState<RecentTask[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetchRecentTasks = useCallback(async () => {
+  // Auto-collapse sidebar on small screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    if (mq.matches) setSidebarOpen(false)
+    const handler = (e: MediaQueryListEvent) => setSidebarOpen(!e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // Fetch all sessions (recent + completed + failed)
+  const fetchSessions = useCallback(async () => {
     try {
-      const resp = await fetch(getApiUrl('/api/deepresearch/recent'))
+      const resp = await fetch(getApiUrl('/api/deepresearch/recent?include_all=true'))
       if (resp.ok) {
-        const data: RecentTask[] = await resp.json()
-        setRecentTasks(data)
+        const data: SessionItem[] = await resp.json()
+        setSessions(data)
       }
     } catch {
       // ignore
     }
   }, [])
 
+  // Poll sessions periodically to keep sidebar up to date
   useEffect(() => {
-    if (!showTask) {
-      fetchRecentTasks()
+    fetchSessions()
+    pollRef.current = setInterval(fetchSessions, 10000)
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [showTask, fetchRecentTasks])
+  }, [fetchSessions])
 
-  const handleResume = useCallback((taskId: string) => {
-    setActiveTaskId(taskId)
+  // Refresh sessions when task view is closed
+  useEffect(() => {
+    if (!showTask) fetchSessions()
+  }, [showTask, fetchSessions])
+
+  const handleNewSession = useCallback(() => {
+    setActiveTaskId(null)
     setShowTask(true)
   }, [])
 
-  const handleNew = useCallback(() => {
-    setActiveTaskId(null)
+  const handleSelectSession = useCallback((taskId: string) => {
+    setActiveTaskId(taskId)
     setShowTask(true)
   }, [])
 
@@ -59,150 +66,153 @@ export default function Home() {
     setActiveTaskId(null)
   }, [])
 
-  const handleDelete = useCallback(async (taskId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!confirm('Delete this task? This will remove all data and files.')) return
+  const handleDeleteSession = useCallback(async (taskId: string) => {
+    if (!confirm('Delete this session? This will remove all data and files.')) return
     try {
       await fetch(getApiUrl(`/api/deepresearch/${taskId}`), { method: 'DELETE' })
-      setRecentTasks(prev => prev.filter(t => t.task_id !== taskId))
+      setSessions(prev => prev.filter(s => s.task_id !== taskId))
+      if (activeTaskId === taskId) {
+        setShowTask(false)
+        setActiveTaskId(null)
+      }
     } catch {
       // ignore
     }
-  }, [])
-
-  if (showTask) {
-    return (
-      <DeepresearchResearchTask
-        onBack={handleBack}
-        resumeTaskId={activeTaskId}
-      />
-    )
-  }
+  }, [activeTaskId])
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-8">
+    <div className="flex flex-col h-full">
+      {/* Top Bar */}
+      <TopBar onNewSession={handleNewSession} />
+
+      {/* Main Content + Sidebar */}
+      <div className="flex-1 flex min-h-0 relative">
+        {/* Main Content Area */}
+        <div className="flex-1 min-h-0 overflow-auto relative">
+          {showTask ? (
+            <DeepresearchResearchTask
+              key={activeTaskId || 'new'}
+              onBack={handleBack}
+              resumeTaskId={activeTaskId}
+            />
+          ) : (
+            <WelcomeView onNewSession={handleNewSession} />
+          )}
+
+          {/* Sidebar Toggle Button (floating) */}
+          <button
+            onClick={() => setSidebarOpen(prev => !prev)}
+            className="absolute top-3 right-3 p-1.5 rounded-lg transition-all duration-150
+              hover:bg-[var(--mars-color-surface-overlay)] z-10"
+            style={{ color: 'var(--mars-color-text-tertiary)' }}
+            title={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
+          >
+            {sidebarOpen ? (
+              <PanelRightClose className="w-4 h-4" />
+            ) : (
+              <PanelRightOpen className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {/* Right Sidebar - Session List */}
+        <div
+          className="transition-all duration-300 ease-in-out overflow-hidden"
+          style={{
+            width: sidebarOpen ? '280px' : '0px',
+            minWidth: sidebarOpen ? '280px' : '0px',
+          }}
+        >
+          <SessionSidebar
+            sessions={sessions}
+            activeSessionId={activeTaskId}
+            onSelectSession={handleSelectSession}
+            onDeleteSession={handleDeleteSession}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Welcome View (shown when no task is active) ───
+
+interface WelcomeViewProps {
+  onNewSession: () => void
+}
+
+function WelcomeView({ onNewSession }: WelcomeViewProps) {
+  return (
+    <div className="h-full flex items-center justify-center p-8">
+      <div className="max-w-lg w-full text-center">
+        {/* Hero Icon */}
+        <div
+          className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%)',
+            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
+          }}
+        >
+          <Sparkles className="w-10 h-10 text-white" />
+        </div>
+
+        {/* Title */}
         <h2
-          className="text-2xl font-semibold"
+          className="text-2xl font-bold mb-2"
           style={{ color: 'var(--mars-color-text)' }}
         >
           PaperPulse
         </h2>
         <p
-          className="text-sm mt-1"
+          className="text-sm mb-8"
           style={{ color: 'var(--mars-color-text-secondary)' }}
         >
-          Deep Scientific Research Paper Generation
+          Generate deep scientific research papers through AI-powered interactive stages
         </p>
-      </div>
 
-      {/* New Task Button */}
-      <button
-        onClick={handleNew}
-        className="w-full mb-6 flex items-center gap-4 p-4 rounded-lg border-2 border-dashed transition-colors hover:border-[var(--mars-color-primary)]"
-        style={{
-          borderColor: 'var(--mars-color-border)',
-          backgroundColor: 'var(--mars-color-surface)',
-        }}
-      >
-        <div
-          className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
+        {/* New Session CTA */}
+        <button
+          onClick={onNewSession}
+          className="inline-flex items-center gap-3 px-6 py-3 rounded-xl text-sm font-semibold
+            text-white transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+          style={{
+            background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+            boxShadow: '0 4px 16px rgba(99, 102, 241, 0.3)',
+          }}
         >
-          <FileText className="w-5 h-5 text-white" />
-        </div>
-        <div className="text-left">
-          <p
-            className="text-sm font-medium"
-            style={{ color: 'var(--mars-color-text)' }}
-          >
-            New Research Paper
-          </p>
-          <p
-            className="text-xs"
-            style={{ color: 'var(--mars-color-text-tertiary)' }}
-          >
-            Start a new deep scientific research through interactive stages
-          </p>
-        </div>
-      </button>
+          <FileText className="w-5 h-5" />
+          Start New Research
+        </button>
 
-      {/* Recent Tasks */}
-      {recentTasks.length > 0 && (
-        <div className="space-y-2">
-          <h3
-            className="text-xs font-medium uppercase tracking-wider mb-3"
-            style={{ color: 'var(--mars-color-text-tertiary)' }}
-          >
-            Recent Tasks
-          </h3>
-          {recentTasks.map((task) => (
-            <button
-              key={task.task_id}
-              onClick={() => handleResume(task.task_id)}
-              className="w-full flex items-center gap-3 p-3 rounded-lg border transition-colors hover:border-[var(--mars-color-primary)]"
+        {/* Quick features */}
+        <div className="grid grid-cols-3 gap-4 mt-10">
+          {[
+            { icon: Upload, label: 'Upload Data', desc: 'CSV, PDF, Text files' },
+            { icon: Sparkles, label: 'AI Stages', desc: '4-phase pipeline' },
+            { icon: FileText, label: 'LaTeX Paper', desc: 'Publication ready' },
+          ].map((feature) => (
+            <div
+              key={feature.label}
+              className="p-3 rounded-xl"
               style={{
-                borderColor: 'var(--mars-color-border)',
                 backgroundColor: 'var(--mars-color-surface)',
+                border: '1px solid var(--mars-color-border)',
               }}
             >
-              <div
-                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
-              >
-                <FileText className="w-4 h-4 text-white" />
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <p
-                  className="text-sm font-medium truncate"
-                  style={{ color: 'var(--mars-color-text)' }}
-                >
-                  {task.task || 'Untitled Research'}
-                </p>
-                <p
-                  className="text-xs"
-                  style={{ color: 'var(--mars-color-text-tertiary)' }}
-                >
-                  {task.current_stage
-                    ? `Stage ${task.current_stage}: ${STAGE_NAMES[task.current_stage] || ''}`
-                    : 'Starting...'}
-                  {' '}&middot;{' '}
-                  {Math.round(task.progress_percent)}% complete
-                </p>
-              </div>
-              <div
-                className="flex-shrink-0 w-20 h-1.5 rounded-full overflow-hidden"
-                style={{ backgroundColor: 'var(--mars-color-surface-overlay)' }}
-              >
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${Math.max(5, task.progress_percent)}%`,
-                    background: 'linear-gradient(90deg, #8b5cf6, #6366f1)',
-                  }}
-                />
-              </div>
-              <ArrowRight
-                className="w-4 h-4 flex-shrink-0"
+              <feature.icon
+                className="w-5 h-5 mx-auto mb-1.5"
                 style={{ color: 'var(--mars-color-text-tertiary)' }}
               />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={(e) => handleDelete(task.task_id, e)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleDelete(task.task_id, e as unknown as React.MouseEvent) }}
-                className="flex-shrink-0 p-1 rounded transition-colors hover:bg-[var(--mars-color-danger-subtle,rgba(239,68,68,0.1))]"
-                title="Delete task"
-              >
-                <X
-                  className="w-3.5 h-3.5"
-                  style={{ color: 'var(--mars-color-text-tertiary)' }}
-                />
-              </div>
-            </button>
+              <p className="text-xs font-medium" style={{ color: 'var(--mars-color-text)' }}>
+                {feature.label}
+              </p>
+              <p className="text-[10px]" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                {feature.desc}
+              </p>
+            </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -255,14 +255,14 @@ export default function PaperPanel({ hook, stageNum, onBack }: PaperPanelProps) 
         <div>
           <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--mars-color-text)' }}>Generated Artifacts</h3>
           <div className="space-y-2">
-            {artifacts.map((path, i) => {
+            {artifacts.map((path) => {
               const isPdf = path.toLowerCase().endsWith('.pdf')
               const isTex = path.toLowerCase().endsWith('.tex')
               const isViewingThis = viewingPdf === path
               const isEditingThis = editingTex === path
 
               return (
-                <div key={i}>
+                <div key={path}>
                   {/* Row */}
                   <div
                     className="flex items-center gap-3 px-4 py-3 rounded-mars-md border"

@@ -46,9 +46,10 @@ export default function ExecutionPanel({
 
   // (stage is started manually via the Run button in the pre-execution UI)
 
-  // Timer
+  // Timer — reset to 0 when execution starts, then tick every second
   useEffect(() => {
     if (!isExecuting) return
+    setElapsed(0) // Reset on each new execution/retry
     const interval = setInterval(() => {
       setElapsed(prev => prev + 1)
     }, 1000)

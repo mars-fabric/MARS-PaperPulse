@@ -28,12 +28,47 @@ def _get_default_log_file() -> str:
     return str(log_dir / "backend.log")
 
 
+def _recover_stale_running_stages():
+    """Reset any stages stuck in 'running' status from a previous server session.
+
+    On server restart, in-memory _running_tasks is empty, so any stage still
+    marked 'running' in the DB is orphaned.  Mark them 'failed' so users can
+    retry instead of being stuck forever.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        from cmbagent.database.base import init_database, get_db_session
+        from cmbagent.database.models import TaskStage
+        from datetime import datetime, timezone
+
+        init_database()
+        db = get_db_session()
+        try:
+            stale = db.query(TaskStage).filter(TaskStage.status == "running").all()
+            if stale:
+                log.warning("Found %d stale 'running' stage(s) from previous session — resetting to 'failed'", len(stale))
+                for stage in stale:
+                    stage.status = "failed"
+                    stage.error_message = "Server restarted while stage was running. Click retry to re-execute."
+                    stage.completed_at = datetime.now(timezone.utc)
+                    log.info("  Reset stage %s (run=%s, stage_num=%d)", stage.id, stage.parent_run_id, stage.stage_number)
+                db.commit()
+            else:
+                log.info("No stale running stages found — clean startup")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("Failed to recover stale stages on startup: %s", exc, exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """App lifespan: re-apply logging after uvicorn overrides it."""
+    """App lifespan: re-apply logging after uvicorn overrides it, recover stale stages."""
     configure_logging(**_log_config)
     import logging
     logging.getLogger(__name__).info("Backend started, logs writing to %s", _log_config.get("log_file", "console"))
+    _recover_stale_running_stages()
     yield
 
 

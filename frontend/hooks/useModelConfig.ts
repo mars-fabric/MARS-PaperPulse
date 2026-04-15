@@ -44,7 +44,7 @@ function fetchConfig(): Promise<ModelConfigResponse | null> {
       _cache = data
       return data
     })
-    .catch(() => null) // never throws — graceful degradation
+    .catch(() => { _fetchPromise = null; return null }) // reset so retry is possible
   return _fetchPromise
 }
 

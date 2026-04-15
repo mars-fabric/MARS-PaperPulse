@@ -16,22 +16,56 @@ from core.config import settings
 router = APIRouter(prefix="/api/files", tags=["Files"])
 
 
+def _resolve_and_validate_path(path: str, must_exist: bool = True) -> str:
+    """Resolve a user-supplied path and validate it is within the allowed sandbox.
+
+    All file operations MUST go through this function to prevent path-traversal
+    attacks (e.g. /api/files/serve?path=/etc/passwd).
+
+    Allowed roots:
+      - The configured work directory (CMBAGENT_DEFAULT_WORK_DIR, default ~/Desktop/cmbdir)
+      - /tmp  (for temporary files used during compilation, etc.)
+
+    Raises HTTPException 403 if the resolved path escapes the sandbox.
+    Raises HTTPException 404 if must_exist=True and the path doesn't exist.
+    """
+    if path.startswith("~"):
+        path = os.path.expanduser(path)
+    # Use realpath to resolve symlinks, preventing symlink-based path traversal
+    abs_path = os.path.realpath(path)
+
+    # Determine allowed root directories (use realpath to match the resolved input path,
+    # which is critical when /home is a mount or symlink to another filesystem like /Innovation)
+    work_dir = os.path.realpath(os.path.expanduser(settings.default_work_dir))
+    allowed_roots = [work_dir, os.path.realpath("/tmp")]
+
+    # Also allow the historical default work dir (~/Desktop/cmbdir) so that
+    # tasks created before a CMBAGENT_DEFAULT_WORK_DIR change remain accessible.
+    legacy_work_dir = os.path.realpath(os.path.expanduser("~/Desktop/cmbdir"))
+    if legacy_work_dir != work_dir:
+        allowed_roots.append(legacy_work_dir)
+
+    # Check that resolved path is within one of the allowed roots
+    if not any(abs_path == root or abs_path.startswith(root + os.sep) for root in allowed_roots):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: path is outside the allowed working directory"
+        )
+
+    if must_exist and not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    return abs_path
+
+
 @router.get("/list")
 async def list_directory(path: str = ""):
     """List files and directories in the specified path."""
     try:
-        # Expand user path and resolve
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-
         if not path:
             path = os.path.expanduser(settings.default_work_dir)
 
-        path = os.path.abspath(path)
-
-        # Security check - ensure path exists
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="Directory not found")
+        path = _resolve_and_validate_path(path)
 
         if not os.path.isdir(path):
             raise HTTPException(status_code=400, detail="Path is not a directory")
@@ -45,7 +79,11 @@ async def list_directory(path: str = ""):
                 if item_name.startswith('.'):
                     continue
 
-                stat_info = os.stat(item_path)
+                try:
+                    stat_info = os.stat(item_path)
+                except (FileNotFoundError, OSError):
+                    continue  # Skip broken symlinks or vanished files
+
                 is_dir = os.path.isdir(item_path)
 
                 file_item = FileItem(
@@ -79,14 +117,7 @@ async def list_directory(path: str = ""):
 async def get_file_content(path: str):
     """Get the content of a file."""
     try:
-        # Expand user path and resolve
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-
-        path = os.path.abspath(path)
-
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="File not found")
+        path = _resolve_and_validate_path(path)
 
         if not os.path.isfile(path):
             raise HTTPException(status_code=400, detail="Path is not a file")
@@ -129,11 +160,7 @@ async def get_file_content(path: str):
 async def save_file_content(path: str, body: dict):
     """Save text content to a file."""
     try:
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-        abs_path = os.path.abspath(path)
-        if not os.path.exists(abs_path):
-            raise HTTPException(status_code=404, detail="File not found")
+        abs_path = _resolve_and_validate_path(path)
         if not os.path.isfile(abs_path):
             raise HTTPException(status_code=400, detail="Path is not a file")
         content = body.get("content")
@@ -152,15 +179,7 @@ async def save_file_content(path: str, body: dict):
 async def clear_directory(path: str):
     """Clear all contents of a directory."""
     try:
-        # Expand user path
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-
-        abs_path = os.path.abspath(path)
-
-        # Security check - ensure path exists and is a directory
-        if not os.path.exists(abs_path):
-            raise HTTPException(status_code=404, detail="Directory not found")
+        abs_path = _resolve_and_validate_path(path)
 
         if not os.path.isdir(abs_path):
             raise HTTPException(status_code=400, detail="Path is not a directory")
@@ -193,14 +212,12 @@ async def clear_directory(path: str):
 async def get_images(work_dir: str):
     """Get all image files from the working directory."""
     try:
-        # Expand user path
-        if work_dir.startswith("~"):
-            work_dir = os.path.expanduser(work_dir)
+        try:
+            abs_path = _resolve_and_validate_path(work_dir)
+        except HTTPException:
+            return {"images": [], "message": "Working directory not found or not accessible"}
 
-        abs_path = os.path.abspath(work_dir)
-
-        # Check if directory exists
-        if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
+        if not os.path.isdir(abs_path):
             return {"images": [], "message": "Working directory not found"}
 
         # Common image extensions
@@ -210,6 +227,8 @@ async def get_images(work_dir: str):
 
         # Recursively search for image files
         for root, dirs, files in os.walk(abs_path):
+            # Skip hidden directories
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
             for file in files:
                 file_path = os.path.join(root, file)
                 file_ext = os.path.splitext(file)[1].lower()
@@ -248,10 +267,9 @@ async def get_images(work_dir: str):
 async def serve_image(path: str):
     """Serve an image file."""
     try:
-        # Security check - ensure path exists and is a file
-        abs_path = os.path.abspath(path)
+        abs_path = _resolve_and_validate_path(path)
 
-        if not os.path.exists(abs_path) or not os.path.isfile(abs_path):
+        if not os.path.isfile(abs_path):
             raise HTTPException(status_code=404, detail="Image file not found")
 
         # Check if it's an image file
@@ -289,10 +307,8 @@ async def serve_image(path: str):
 async def serve_file(path: str):
     """Serve a file inline with its proper MIME type (for browser viewing)."""
     try:
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-        abs_path = os.path.abspath(path)
-        if not os.path.exists(abs_path) or not os.path.isfile(abs_path):
+        abs_path = _resolve_and_validate_path(path)
+        if not os.path.isfile(abs_path):
             raise HTTPException(status_code=404, detail="File not found")
         mime_type = mimetypes.guess_type(abs_path)[0] or "application/octet-stream"
         return FileResponse(abs_path, media_type=mime_type)
@@ -306,17 +322,17 @@ async def serve_file(path: str):
 async def download_file(path: str):
     """Download a file as an attachment."""
     try:
-        if path.startswith("~"):
-            path = os.path.expanduser(path)
-        abs_path = os.path.abspath(path)
-        if not os.path.exists(abs_path) or not os.path.isfile(abs_path):
+        abs_path = _resolve_and_validate_path(path)
+        if not os.path.isfile(abs_path):
             raise HTTPException(status_code=404, detail="File not found")
         mime_type = mimetypes.guess_type(abs_path)[0] or "application/octet-stream"
         filename = os.path.basename(abs_path)
+        # Escape quotes in filename to prevent header injection
+        safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"')
         return FileResponse(
             abs_path,
             media_type=mime_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )
     except HTTPException:
         raise
@@ -328,13 +344,10 @@ async def download_file(path: str):
 async def find_file(directory: str, filename: str):
     """Recursively search for a file by name within a directory."""
     try:
-        if directory.startswith("~"):
-            directory = os.path.expanduser(directory)
+        abs_dir = _resolve_and_validate_path(directory)
 
-        abs_dir = os.path.abspath(directory)
-
-        if not os.path.exists(abs_dir) or not os.path.isdir(abs_dir):
-            raise HTTPException(status_code=404, detail="Directory not found")
+        if not os.path.isdir(abs_dir):
+            raise HTTPException(status_code=400, detail="Path is not a directory")
 
         # Sanitize filename to prevent path traversal
         safe_filename = os.path.basename(filename)
@@ -343,6 +356,8 @@ async def find_file(directory: str, filename: str):
 
         matches = []
         for root, dirs, files in os.walk(abs_dir):
+            # Skip hidden directories (e.g. .git)
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
             for f in files:
                 if f == safe_filename:
                     full_path = os.path.join(root, f)
@@ -407,6 +422,14 @@ async def upload_file(
     if ".." in safe_subfolder:
         raise HTTPException(status_code=400, detail="Invalid subfolder path")
 
+    # Check Content-Length header first to reject oversized uploads early
+    max_size = settings.max_file_size_mb * 1024 * 1024
+    if file.size and file.size > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Max size: {settings.max_file_size_mb}MB"
+        )
+
     # Build target directory
     # Look up the task's actual work_dir from the database first (for session-based paths)
     target_dir = None
@@ -429,13 +452,14 @@ async def upload_file(
         base_work_dir = os.path.expanduser(settings.default_work_dir)
         target_dir = os.path.join(base_work_dir, "deepresearch_tasks", task_id, safe_subfolder)
 
+    # Validate the target directory is within the sandbox
+    _resolve_and_validate_path(target_dir, must_exist=False)
     os.makedirs(target_dir, exist_ok=True)
 
     target_path = os.path.join(target_dir, safe_name)
 
-    # Read and validate size
+    # Read and validate actual size (defense-in-depth: Content-Length can be spoofed)
     contents = await file.read()
-    max_size = settings.max_file_size_mb * 1024 * 1024
     if len(contents) > max_size:
         raise HTTPException(
             status_code=413,

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/core'
 import RefinementChat from './RefinementChat'
@@ -66,6 +66,13 @@ export default function ReviewPanel({
   const isStageRunning = stage?.status === 'running' || isExecuting
   const isStageNotStarted = stage?.status === 'pending'
   const isStageFailed = stage?.status === 'failed'
+
+  // Cleanup save timeout on unmount to prevent firing on unmounted component
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    }
+  }, [])
 
   // Load content when stage is completed (or failed — content may still
   // be available on disk even if the DB persist step failed)

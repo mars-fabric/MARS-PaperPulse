@@ -170,6 +170,9 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
         const stage = state.stages.find(s => s.stage_number === stageNum)
         if (stage && (stage.status === 'completed' || stage.status === 'failed')) {
           setIsExecuting(false)
+          if (stage.status === 'failed') {
+            setError(stage.error || `Stage ${stageNum} failed`)
+          }
           if (pollRef.current) clearInterval(pollRef.current)
           pollRef.current = null
           if (consolePollRef.current) clearInterval(consolePollRef.current)
@@ -185,7 +188,9 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
   const startConsolePoll = useCallback((id: string, stageNum: number) => {
     if (consolePollRef.current) clearInterval(consolePollRef.current)
     consoleIndexRef.current = 0
-    consolePollRef.current = setInterval(async () => {
+
+    // Define the poll function
+    const doPoll = async () => {
       try {
         const resp = await fetch(
           getApiUrl(`/api/deepresearch/${id}/stages/${stageNum}/console?since=${consoleIndexRef.current}`)
@@ -199,7 +204,11 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       } catch {
         // ignore console poll errors
       }
-    }, 2000)
+    }
+
+    // Poll immediately, then every 1 second (faster feedback)
+    doPoll()
+    consolePollRef.current = setInterval(doPoll, 1000)
   }, [])
 
   const connectWs = useCallback((id: string, stageNum: number) => {
@@ -266,11 +275,14 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
         body: JSON.stringify({ config_overrides }),
       })
 
+      // Reset console before connecting to avoid overwriting WS-received lines
+      setConsoleOutput([`Stage ${stageNum} execution started...`])
+      // Clear stale refinement messages from previous stages
+      setRefinementMessages([])
       // Connect WS + start polling (status + console)
       connectWs(id, stageNum)
       startPolling(id, stageNum)
       startConsolePoll(id, stageNum)
-      setConsoleOutput([`Stage ${stageNum} execution started...`])
     } catch (e: unknown) {
       setIsExecuting(false)
       setError(e instanceof Error ? e.message : 'Failed to execute stage')
@@ -494,6 +506,21 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
   const resumeTask = useCallback(async (id: string) => {
     setIsLoading(true)
     setError(null)
+
+    // Clean up any previous session state to avoid log/data mixing
+    wsRef.current?.close()
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    if (consolePollRef.current) { clearInterval(consolePollRef.current); consolePollRef.current = null }
+    if (analyzeConsolePollRef.current) { clearInterval(analyzeConsolePollRef.current); analyzeConsolePollRef.current = null }
+    setConsoleOutput([])
+    setEditableContent('')
+    setRefinementMessages([])
+    setIsExecuting(false)
+    setUploadedFiles([])
+    setFileContextOutput([])
+    setFileContextStatus('idle')
+    setFileContext('')
+
     // Set ref synchronously so any concurrent autoCreateTask calls see this ID
     // and bail out immediately instead of creating a new empty task
     taskIdRef.current = id
@@ -505,7 +532,7 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       let resumeStep: DeepresearchWizardStep = 0
       for (const stage of state.stages) {
         if (stage.status === 'running') {
-          // Stage is running - go to that step and reconnect
+          // Stage is actively running - reconnect to listen for updates
           resumeStep = stage.stage_number as DeepresearchWizardStep
           setIsExecuting(true)
           connectWs(id, stage.stage_number)
@@ -516,8 +543,15 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
         if (stage.status === 'completed') {
           // Completed - advance past it
           resumeStep = Math.min(stage.stage_number + 1, 4) as DeepresearchWizardStep
+        } else if (stage.status === 'failed') {
+          // Failed (could be interrupted by server restart) - land here with error shown
+          resumeStep = stage.stage_number as DeepresearchWizardStep
+          if (stage.error) {
+            setError(stage.error)
+          }
+          break
         } else {
-          // Pending or failed - stop here
+          // Pending - stop here
           resumeStep = stage.stage_number as DeepresearchWizardStep
           break
         }
@@ -576,11 +610,18 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       setConsoleOutput([])
       setIsExecuting(false)
       setError(null)
+      setUploadedFiles([])
+      setFileContextOutput([])
+      setFileContextStatus('idle')
+      setFileContext('')
+      taskIdRef.current = null
       wsRef.current?.close()
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = null
       if (consolePollRef.current) clearInterval(consolePollRef.current)
       consolePollRef.current = null
+      if (analyzeConsolePollRef.current) clearInterval(analyzeConsolePollRef.current)
+      analyzeConsolePollRef.current = null
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete task')
     }

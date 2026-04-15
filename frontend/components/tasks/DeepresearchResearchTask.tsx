@@ -93,28 +93,29 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
   }, [deleteTask, onBack])
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-5 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-5">
         <button
           onClick={onBack}
-          className="p-2 rounded-mars-md transition-colors hover:bg-[var(--mars-color-surface-overlay)]"
+          className="p-1.5 rounded-lg transition-colors hover:bg-[var(--mars-color-surface-overlay)]"
           style={{ color: 'var(--mars-color-text-secondary)' }}
+          title="Back to home"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
+        <div className="flex-1 min-w-0">
           <h2
-            className="text-2xl font-semibold"
+            className="text-lg font-semibold truncate"
             style={{ color: 'var(--mars-color-text)' }}
           >
-            Deep Scientific Research
+            {taskState?.task || 'New Research'}
           </h2>
           <p
-            className="text-sm mt-0.5"
-            style={{ color: 'var(--mars-color-text-secondary)' }}
+            className="text-xs mt-0.5"
+            style={{ color: 'var(--mars-color-text-tertiary)' }}
           >
-            Generate a deep scientific research paper through interactive stages
+            Deep Scientific Research Paper Generation
           </p>
         </div>
         {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (

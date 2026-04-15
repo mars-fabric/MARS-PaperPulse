@@ -67,8 +67,6 @@ def configure_logging(
     """
     global _configured
 
-    print(f"[CONFIGURE_LOGGING] Called with log_file={log_file}, log_level={log_level}", file=sys.stderr)
-
     # Processors for structlog-native loggers
     structlog_processors = [
         structlog.contextvars.merge_contextvars,
@@ -133,7 +131,6 @@ def configure_logging(
 
     # Add file handler if specified
     if log_file:
-        print(f"[CONFIGURE_LOGGING] Adding file handler for {log_file}", file=sys.stderr)
         # Use mode 'a' (append) and delay=False to ensure immediate writes
         file_handler = logging.FileHandler(log_file, mode='a', delay=False)
         file_handler.setLevel(getattr(logging, log_level.upper()))  # Explicitly set level
@@ -145,7 +142,6 @@ def configure_logging(
             ],
         ))
         root_logger.addHandler(file_handler)
-        print(f"[CONFIGURE_LOGGING] File handler added successfully, total handlers: {len(root_logger.handlers)}", file=sys.stderr)
 
     # Reset any global logging disable (e.g. cmbagent's class-level
     # logging.disable(logging.CRITICAL) that runs at import time)

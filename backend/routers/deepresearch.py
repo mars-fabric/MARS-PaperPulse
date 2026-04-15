@@ -7,6 +7,7 @@ individually by the user after review/edit.
 """
 
 import asyncio
+import contextvars
 import io
 import os
 import sys
@@ -64,20 +65,27 @@ _running_analyses: Dict[str, asyncio.Task] = {}
 _console_buffers: Dict[str, List[str]] = {}
 _console_lock = threading.Lock()
 
+# Maximum lines per console buffer to prevent memory exhaustion
+_MAX_CONSOLE_BUFFER_LINES = 50_000
+
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
 _db_initialized = False
+_db_init_lock = threading.Lock()
 
 def _get_db():
     """Get a database session, ensuring schema is up to date."""
     global _db_initialized
     if not _db_initialized:
-        from cmbagent.database.base import init_database
-        init_database()
-        _db_initialized = True
+        with _db_init_lock:
+            # Double-check after acquiring lock
+            if not _db_initialized:
+                from cmbagent.database.base import init_database
+                init_database()
+                _db_initialized = True
     from cmbagent.database.base import get_db_session
     return get_db_session()
 
@@ -223,27 +231,95 @@ def _build_file_context(work_dir: str) -> str:
     return "\n".join(sections)
 
 
-class _ConsoleCapture:
-    """Thread-safe stdout/stderr capture that stores output in a shared buffer."""
+# ── Context-aware console capture ──
+# Routes stdout/stderr to the correct per-task console buffer using TWO
+# complementary mechanisms:
+#   1. Thread-ID mapping  — primary, covers asyncio.to_thread workers AND
+#      any sub-threads they spawn (via _CapturingThread monkey-patch).
+#   2. contextvars        — fallback, covers direct async code (stage 4
+#      paper phase) where multiple asyncio tasks share the event-loop thread.
 
-    def __init__(self, buf_key: str, original_stream):
-        self._buf_key = buf_key
+_active_buf_key: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    '_active_buf_key', default=None,
+)
+
+# Thread-ID → buf_key mapping.  Registered when a worker thread starts,
+# unregistered when it ends.  Sub-threads created by libraries (autogen,
+# crewai) inherit the parent thread's buf_key via _CapturingThread.
+_thread_buf_map: Dict[int, str] = {}
+_thread_buf_map_lock = threading.Lock()
+
+# Original streams saved before capture is installed
+_original_stdout = None
+_original_stderr = None
+_capture_installed = False
+
+# Keep reference to original Thread class before monkey-patching
+_OriginalThread = threading.Thread
+
+
+class _CapturingThread(_OriginalThread):
+    """Thread subclass that propagates the parent thread's buf_key to the
+    child thread, so console output from library-spawned sub-threads is
+    routed to the correct task buffer."""
+
+    def start(self):
+        parent_tid = threading.get_ident()
+        with _thread_buf_map_lock:
+            parent_buf = _thread_buf_map.get(parent_tid)
+        if parent_buf:
+            original_run = self.run
+
+            def _wrapped_run():
+                with _thread_buf_map_lock:
+                    _thread_buf_map[threading.get_ident()] = parent_buf
+                try:
+                    original_run()
+                finally:
+                    with _thread_buf_map_lock:
+                        _thread_buf_map.pop(threading.get_ident(), None)
+
+            self.run = _wrapped_run
+        super().start()
+
+
+class _RoutingConsoleCapture:
+    """A single sys.stdout/stderr replacement that routes output to the
+    correct per-task console buffer.
+
+    Lookup order: thread-ID map → contextvars → discard (terminal only).
+    """
+
+    def __init__(self, original_stream):
         self._original = original_stream
 
     def write(self, text: str):
-        # Always write to original stream too
+        # Always write to original stream (terminal)
         if self._original:
-            self._original.write(text)
-        # Store in shared buffer (line by line)
+            try:
+                self._original.write(text)
+            except Exception:
+                pass
+        # Route to the correct buffer
         if text and text.strip():
-            with _console_lock:
-                if self._buf_key not in _console_buffers:
-                    _console_buffers[self._buf_key] = []
-                _console_buffers[self._buf_key].append(text.rstrip())
+            # 1. Try thread-ID map (covers to_thread workers + sub-threads)
+            with _thread_buf_map_lock:
+                buf_key = _thread_buf_map.get(threading.get_ident())
+            # 2. Fallback to context var (covers async code in event loop)
+            if buf_key is None:
+                buf_key = _active_buf_key.get(None)
+            if buf_key:
+                with _console_lock:
+                    buf = _console_buffers.setdefault(buf_key, [])
+                    if len(buf) < _MAX_CONSOLE_BUFFER_LINES:
+                        buf.append(text.rstrip())
 
     def flush(self):
         if self._original:
-            self._original.flush()
+            try:
+                self._original.flush()
+            except Exception:
+                pass
 
     def fileno(self):
         if self._original:
@@ -252,6 +328,41 @@ class _ConsoleCapture:
 
     def isatty(self):
         return False
+
+    def __getattr__(self, name):
+        # Proxy any other attribute to the original stream
+        return getattr(self._original, name)
+
+
+def _install_console_capture():
+    """Install the global routing capture on sys.stdout/stderr (once).
+
+    Also monkey-patches threading.Thread so sub-threads spawned by libraries
+    inherit the parent thread's buf_key for correct output routing.
+    """
+    global _original_stdout, _original_stderr, _capture_installed
+    if _capture_installed:
+        return
+    _original_stdout = sys.stdout
+    _original_stderr = sys.stderr
+    sys.stdout = _RoutingConsoleCapture(_original_stdout)
+    sys.stderr = _RoutingConsoleCapture(_original_stderr)
+    threading.Thread = _CapturingThread  # type: ignore[misc]
+    _capture_installed = True
+
+
+def _run_with_thread_capture(buf_key: str, func, *args, **kwargs):
+    """Wrapper that registers the current thread's ID → buf_key mapping
+    before running func, and unregisters on exit.  Passed as the target
+    to asyncio.to_thread() so the worker thread is tracked."""
+    tid = threading.get_ident()
+    with _thread_buf_map_lock:
+        _thread_buf_map[tid] = buf_key
+    try:
+        return func(*args, **kwargs)
+    finally:
+        with _thread_buf_map_lock:
+            _thread_buf_map.pop(tid, None)
 
 
 def _get_console_lines(buf_key: str, since_index: int = 0) -> List[str]:
@@ -396,18 +507,52 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
             # Check if the background task is actually alive
             if bg_key in _running_tasks and not _running_tasks[bg_key].done():
                 raise HTTPException(status_code=409, detail="Stage is already running")
-            # Otherwise it's a stale "running" from a previous server session -- allow retry
+            # Stale "running" from a previous server session — reset to allow retry
+            logger.warning("Resetting stale 'running' stage %s for task %s", stage_num, task_id)
+            repo.update_stage_status(
+                stage.id, "failed",
+                error_message="Execution was interrupted. Retrying...",
+            )
+            # Refresh the stage object after status update
+            stage = next((s for s in repo.list_stages(parent_run_id=task_id) if s.stage_number == stage_num), stage)
 
         if stage.status == "completed":
-            raise HTTPException(status_code=409, detail="Stage is already completed")
+            # Allow re-execution: reset to "pending" so the stage can be re-run.
+            # This enables users to re-run a stage after editing its output
+            # or if they want to regenerate results with different config.
+            logger.info("Re-running completed stage %d for task %s", stage_num, task_id)
+            repo.update_stage_status(stage.id, "pending")
+            stage = next((s for s in repo.list_stages(parent_run_id=task_id) if s.stage_number == stage_num), stage)
 
         # Validate prerequisites: all previous stages must be completed
+        # Also recover stale "running" prerequisite stages
+        stages = repo.list_stages(parent_run_id=task_id)  # Refresh after possible status update above
         for s in stages:
-            if s.stage_number < stage_num and s.status != "completed":
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Stage {s.stage_number} ({s.stage_name}) must be completed first"
-                )
+            if s.stage_number < stage_num:
+                if s.status == "running":
+                    # Check if this prerequisite stage has an active background task
+                    prereq_key = f"{task_id}:{s.stage_number}"
+                    if prereq_key not in _running_tasks or _running_tasks[prereq_key].done():
+                        # Stale — reset it so the error message is accurate
+                        logger.warning("Resetting stale prerequisite stage %d for task %s", s.stage_number, task_id)
+                        repo.update_stage_status(
+                            s.id, "failed",
+                            error_message="Execution was interrupted (server restart).",
+                        )
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Stage {s.stage_number} ({s.stage_name}) was interrupted. Please re-run it first."
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Stage {s.stage_number} ({s.stage_name}) is still running. Wait for it to complete."
+                        )
+                elif s.status != "completed":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Stage {s.stage_number} ({s.stage_name}) must be completed first"
+                    )
 
         # Get parent run metadata
         from cmbagent.database.models import WorkflowRun
@@ -428,8 +573,20 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
         shared_state = build_shared_state(task_id, stage_num, db, session_id=session_id)
         shared_state.setdefault("data_description", data_description)
 
-        # Mark stage as running
-        repo.update_stage_status(stage.id, "running")
+        # Mark stage as running (reset timestamps/error for retries)
+        stage.status = "running"
+        stage.started_at = datetime.now(timezone.utc)
+        stage.completed_at = None
+        stage.error_message = None
+
+        # Update parent WorkflowRun status back to "executing"
+        # (may have been "failed" from a previous stop or crash)
+        from cmbagent.database.models import WorkflowRun as _WFRun
+        parent = db.query(_WFRun).filter(_WFRun.id == task_id).first()
+        if parent and parent.status != "executing":
+            parent.status = "executing"
+
+        db.commit()
 
         config_overrides = (request.config_overrides if request else None) or {}
     finally:
@@ -497,8 +654,15 @@ async def _run_phase(
     finally:
         bg_key = f"{task_id}:{stage_num}"
         _running_tasks.pop(bg_key, None)
-        # Don't clear buffer here - WS endpoint needs to read remaining lines
-        # Buffer is cleared after WS sends final event or after a timeout
+        # Schedule delayed buffer cleanup (gives WebSocket 60s to read remaining lines)
+        async def _delayed_buffer_cleanup(key: str, delay: int = 60):
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                _clear_console_buffer(key)
+        asyncio.create_task(_delayed_buffer_cleanup(buf_key))
 
 
 async def _run_planning_control_stage(
@@ -648,6 +812,8 @@ async def _run_planning_control_stage(
             config_overrides=config_overrides,
         )
     elif stage_num == 2:
+        if "research_idea" not in shared_state:
+            raise ValueError("Stage 1 (Idea Generation) output is missing 'research_idea'. Re-run Stage 1.")
         kwargs = stage_helpers.build_method_kwargs(
             data_description=data_description,
             research_idea=shared_state["research_idea"],
@@ -656,6 +822,9 @@ async def _run_planning_control_stage(
             config_overrides=config_overrides,
         )
     elif stage_num == 3:
+        missing = [k for k in ("research_idea", "methodology") if k not in shared_state]
+        if missing:
+            raise ValueError(f"Previous stage outputs missing: {', '.join(missing)}. Re-run earlier stages.")
         kwargs = stage_helpers.build_experiment_kwargs(
             data_description=data_description,
             research_idea=shared_state["research_idea"],
@@ -676,23 +845,20 @@ async def _run_planning_control_stage(
             f"Stage {stage_num} ({sdef['name']}) initialized, executing..."
         )
 
-    # ── 4. Run with stdout/stderr capture ──
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    capture_out = _ConsoleCapture(buf_key, original_stdout)
-    capture_err = _ConsoleCapture(buf_key, original_stderr)
+    # ── 4. Run with thread-isolated stdout capture ──
+    # Install the global routing capture (idempotent), then run the function
+    # inside _run_with_thread_capture which registers the worker thread's ID
+    # → buf_key so ALL output (including from library sub-threads) is routed
+    # to the correct console buffer.
+    _install_console_capture()
 
-    try:
-        sys.stdout = capture_out
-        sys.stderr = capture_err
-        results = await asyncio.to_thread(
-            planning_and_control_context_carryover,
-            task_arg,
-            **kwargs,
-        )
-    finally:
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
+    results = await asyncio.to_thread(
+        _run_with_thread_capture,
+        buf_key,
+        planning_and_control_context_carryover,
+        task_arg,
+        **kwargs,
+    )
 
     # ── 5. Extract results + save files ──
     if stage_num == 1:
@@ -705,7 +871,7 @@ async def _run_planning_control_stage(
         methodology = stage_helpers.extract_method_result(results)
         methods_path = stage_helpers.save_method(methodology, work_dir)
         output_data = stage_helpers.build_method_output(
-            shared_state["research_idea"], data_description,
+            shared_state.get("research_idea", ""), data_description,
             methodology, methods_path, results["chat_history"],
         )
     elif stage_num == 3:
@@ -714,8 +880,8 @@ async def _run_planning_control_stage(
             experiment_results, plot_paths, work_dir,
         )
         output_data = stage_helpers.build_experiment_output(
-            shared_state["research_idea"], data_description,
-            shared_state["methodology"], experiment_results,
+            shared_state.get("research_idea", ""), data_description,
+            shared_state.get("methodology", ""), experiment_results,
             final_plot_paths, results_path, plots_dir, results["chat_history"],
         )
 
@@ -751,6 +917,15 @@ async def _run_planning_control_stage(
                 _console_buffers.setdefault(buf_key, []).append(
                     f"Stage {stage_num} ({sdef['name']}) completed successfully."
                 )
+
+            # Update parent status: "completed" if all stages done
+            refreshed = repo.list_stages(parent_run_id=task_id)
+            if all(s.status == "completed" for s in refreshed):
+                from cmbagent.database.models import WorkflowRun as _WR
+                parent = persist_db.query(_WR).filter(_WR.id == task_id).first()
+                if parent:
+                    parent.status = "completed"
+
         persist_db.commit()
     finally:
         persist_db.close()
@@ -791,19 +966,16 @@ async def _run_paper_stage(
             f"Paper generation initialized, executing..."
         )
 
-    # Run the phase with stdout/stderr capture
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    capture_out = _ConsoleCapture(buf_key, original_stdout)
-    capture_err = _ConsoleCapture(buf_key, original_stderr)
+    # Run the phase with context-aware stdout capture.
+    # Paper phase is async (runs in the event loop), so use contextvars
+    # for routing.  Each asyncio task has its own context copy.
+    _install_console_capture()
+    _active_buf_key.set(buf_key)
 
     try:
-        sys.stdout = capture_out
-        sys.stderr = capture_err
         result = await phase.execute(context)
     finally:
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
+        _active_buf_key.set(None)
 
     # Persist result to DB
     db = _get_db()
@@ -825,6 +997,14 @@ async def _run_paper_stage(
                     _console_buffers.setdefault(buf_key, []).append(
                         f"Stage {stage_num} ({sdef['name']}) completed successfully."
                     )
+
+                # Update parent status: "completed" if all stages done
+                refreshed = repo.list_stages(parent_run_id=task_id)
+                if all(s.status == "completed" for s in refreshed):
+                    from cmbagent.database.models import WorkflowRun as _WR2
+                    parent = db.query(_WR2).filter(_WR2.id == task_id).first()
+                    if parent:
+                        parent.status = "completed"
             else:
                 repo.update_stage_status(
                     stage.id,
@@ -955,6 +1135,11 @@ async def update_stage_content(task_id: str, stage_num: int, request: Deepresear
         # If stage was failed but has recovered content, mark it as completed
         new_status = "completed" if stage.status == "failed" else stage.status
 
+        # Validate that field is an expected shared_state key
+        allowed_fields = {"research_idea", "methodology", "results"}
+        if request.field not in allowed_fields:
+            raise HTTPException(status_code=400, detail=f"Invalid field '{request.field}'. Allowed: {sorted(allowed_fields)}")
+
         # Update output_data['shared'][field]
         output_data = stage.output_data or {}
         shared = output_data.get("shared", {})
@@ -995,7 +1180,6 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
     This is a single LLM call (not a full phase execution).
     Returns the refined content for the user to review and apply.
     """
-    import asyncio
     import concurrent.futures
 
     prompt = (
@@ -1017,9 +1201,8 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
                 max_tokens=4096,
             )
 
-        loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            refined = await loop.run_in_executor(executor, _call_llm)
+            refined = await asyncio.get_running_loop().run_in_executor(executor, _call_llm)
 
         return DeepresearchRefineResponse(
             refined_content=refined,
@@ -1070,7 +1253,7 @@ async def analyze_files(task_id: str):
 async def get_analyze_console(task_id: str, since: int = 0):
     """Poll analysis progress. Returns is_done=True and context_text when complete."""
     buf_key = f"{task_id}:analyze"
-    lines = _get_console_lines(buf_key, since_index=since)
+    raw_lines = _get_console_lines(buf_key, since_index=since)
 
     with _console_lock:
         full_buf = list(_console_buffers.get(buf_key, []))
@@ -1078,8 +1261,12 @@ async def get_analyze_console(task_id: str, since: int = 0):
     has_error = "__ANALYZE_ERROR__" in full_buf
     is_done = has_done or has_error
 
+    # Calculate next_index from raw (unfiltered) lines so the client
+    # advances past sentinel entries and never re-fetches them.
+    next_index = since + len(raw_lines)
+
     # Filter sentinels from displayed lines
-    lines = [l for l in lines if l not in ("__ANALYZE_DONE__", "__ANALYZE_ERROR__")]
+    display_lines = [l for l in raw_lines if l not in ("__ANALYZE_DONE__", "__ANALYZE_ERROR__")]
 
     context_text = None
     if has_done:
@@ -1099,8 +1286,8 @@ async def get_analyze_console(task_id: str, since: int = 0):
                 pass
 
     return {
-        "lines": lines,
-        "next_index": since + len(lines),
+        "lines": display_lines,
+        "next_index": next_index,
         "is_done": is_done,
         "has_error": has_error,
         "context_text": context_text,
@@ -1163,9 +1350,8 @@ async def refine_file_context(task_id: str, request: RefineContextRequest):
                 max_tokens=4096,
             )
 
-        loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            refined = await loop.run_in_executor(executor, _call)
+            refined = await asyncio.get_running_loop().run_in_executor(executor, _call)
 
         ctx_path = os.path.join(work_dir, "input_files", "data_context.md")
         with open(ctx_path, 'w', encoding='utf-8') as f:
@@ -1368,20 +1554,22 @@ async def _run_file_analysis(task_id: str, work_dir: str, buf_key: str):
 
                 elif ext == '.pdf':
                     try:
-                        import pdfplumber
-                        with pdfplumber.open(path) as pdf:
-                            info.append(f"Format: PDF, {len(pdf.pages)} pages")
-                            text = (pdf.pages[0].extract_text() or "")[:800]
-                            info.append(f"First page text:\n```\n{text}\n```")
-                    except ImportError:
-                        try:
-                            import pypdf
-                            reader = pypdf.PdfReader(path)
-                            info.append(f"Format: PDF, {len(reader.pages)} pages")
-                            text = (reader.pages[0].extract_text() or "")[:800]
-                            info.append(f"First page text:\n```\n{text}\n```")
-                        except ImportError:
-                            info.append("Format: PDF (no parser available)")
+                        from services.pdf_extractor import extract_pdf_content
+                        # Extract up to 8000 chars to give LLM rich context
+                        extracted = extract_pdf_content(path, max_chars=8000)
+                        if extracted:
+                            # Count pages via PyMuPDF
+                            try:
+                                import fitz
+                                doc = fitz.open(path)
+                                num_pages = len(doc)
+                                doc.close()
+                                info.append(f"Format: PDF, {num_pages} pages")
+                            except Exception:
+                                info.append("Format: PDF")
+                            info.append(f"Extracted content:\n```\n{extracted}\n```")
+                        else:
+                            info.append("Format: PDF (text extraction returned no content)")
                     except Exception as e:
                         info.append(f"Format: PDF (read error: {e})")
 
@@ -1400,6 +1588,9 @@ async def _run_file_analysis(task_id: str, work_dir: str, buf_key: str):
             )
 
         from cmbagent.llm_provider import safe_completion
+
+        logger.info("File analysis: %d files inspected, sending to LLM", len(file_infos))
+        logger.debug("File analysis prompt preview (first 500 chars): %s", files_section[:500])
 
         prompt = (
             "You are an expert research data analyst. Analyze the following research data files "
@@ -1431,26 +1622,38 @@ async def _run_file_analysis(task_id: str, work_dir: str, buf_key: str):
             "Output ONLY the data context document - no preamble, no explanation."
         )
 
-        return safe_completion(
+        result = safe_completion(
             messages=[{"role": "user", "content": prompt}],
             model="gpt-4o",
             temperature=0.3,
             max_tokens=4000,
         )
+        logger.info("File analysis LLM response length: %d", len(result) if result else 0)
+
+        if not result or not result.strip():
+            logger.warning("File analysis: LLM returned empty response, using file summaries as fallback")
+            result = (
+                "# Research Data Context\n\n"
+                "*(Auto-generated from file metadata — LLM analysis returned no content)*\n\n"
+                + files_section
+            )
+
+        return result
 
     try:
-        loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            context_text = await loop.run_in_executor(executor, _do_analysis)
+            context_text = await asyncio.get_running_loop().run_in_executor(executor, _do_analysis)
 
         ctx_path = os.path.join(work_dir, "input_files", "data_context.md")
+        logger.info("Writing data_context.md to %s (length=%d)", ctx_path, len(context_text) if context_text else 0)
+        os.makedirs(os.path.dirname(ctx_path), exist_ok=True)
         with open(ctx_path, 'w', encoding='utf-8') as f:
             f.write(context_text)
 
         with _console_lock:
             _console_buffers[buf_key].append("\u2713 Analysis complete. Data context saved.")
             _console_buffers[buf_key].append("__ANALYZE_DONE__")
-        logger.info("deepresearch_analyze_complete task_id=%s", task_id)
+        logger.info("deepresearch_analyze_complete task_id=%s ctx_path=%s", task_id, ctx_path)
     except Exception as e:
         logger.error("deepresearch_analyze_failed task_id=%s error=%s", task_id, e, exc_info=True)
         with _console_lock:
@@ -1484,26 +1687,37 @@ async def get_stage_console(task_id: str, stage_num: int, since: int = 0):
 # GET /api/deepresearch/recent  (must be before /{task_id} to avoid route conflict)
 # =============================================================================
 
-@router.get("/recent", response_model=list[DeepresearchRecentTaskResponse])
-async def list_recent_tasks():
-    """List incomplete Deepresearch tasks for the resume flow."""
+@router.get("/recent", response_model=List[DeepresearchRecentTaskResponse])
+async def list_recent_tasks(include_all: bool = False):
+    """List Deepresearch tasks for the session sidebar.
+
+    Args:
+        include_all: If True, include completed and failed tasks too.
+                     If False (default), only return active/in-progress tasks.
+    """
     db = _get_db()
     try:
         from cmbagent.database.models import WorkflowRun
-        # Find deepresearch runs that are not completed/failed
-        runs = (
-            db.query(WorkflowRun)
-            .filter(
-                WorkflowRun.mode == "deepresearch-research",
-                WorkflowRun.parent_run_id.is_(None),  # Only parent runs
+
+        query = db.query(WorkflowRun).filter(
+            WorkflowRun.mode == "deepresearch-research",
+            WorkflowRun.parent_run_id.is_(None),  # Only parent runs
+        )
+
+        if not include_all:
+            query = query.filter(
                 WorkflowRun.status.in_(["executing", "draft", "planning"]),
             )
+
+        runs = (
+            query
             .order_by(WorkflowRun.started_at.desc())
-            .limit(20)
+            .limit(50)
             .all()
         )
 
         result = []
+        parent_status_changed = False
         for run in runs:
             repo = _get_stage_repo(db, session_id=run.session_id)
             progress = repo.get_task_progress(parent_run_id=run.id)
@@ -1514,14 +1728,37 @@ async def list_recent_tasks():
                     current_stage = s.stage_number
                     break
 
+            # Compute effective status from child stages for reliability.
+            # The parent WorkflowRun.status may be stale (e.g. "failed" after
+            # a stop, but user has retried and a stage is now "running").
+            effective_status = run.status
+            has_running = any(s.status == "running" for s in stages)
+            has_failed = any(s.status == "failed" for s in stages)
+            all_completed = all(s.status == "completed" for s in stages) and len(stages) > 0
+
+            if has_running:
+                effective_status = "executing"
+            elif all_completed:
+                effective_status = "completed"
+            elif has_failed and not has_running:
+                effective_status = "failed"
+
+            # Sync parent status if it diverged from computed status
+            if run.status != effective_status:
+                run.status = effective_status
+                parent_status_changed = True
+
             result.append(DeepresearchRecentTaskResponse(
                 task_id=run.id,
                 task=run.task_description or "",
-                status=run.status,
+                status=effective_status,
                 created_at=run.started_at.isoformat() if run.started_at else None,
                 current_stage=current_stage,
                 progress_percent=progress.get("progress_percent", 0.0),
             ))
+
+        if parent_status_changed:
+            db.commit()
 
         return result
     finally:
@@ -1589,11 +1826,11 @@ async def delete_task(task_id: str):
             if bg_task and not bg_task.done():
                 bg_task.cancel()
 
-    # Clean up console buffers
-    for key in list(_console_buffers):
-        if key.startswith(f"{task_id}:"):
-            with _console_lock:
-                _console_buffers.pop(key, None)
+    # Clean up console buffers (thread-safe: snapshot + remove inside lock)
+    with _console_lock:
+        keys_to_remove = [key for key in _console_buffers if key.startswith(f"{task_id}:")]
+        for key in keys_to_remove:
+            _console_buffers.pop(key, None)
 
     # 2. Delete DB records
     db = _get_db()
@@ -1640,7 +1877,22 @@ async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
     """
     import concurrent.futures
 
-    tex_path = os.path.abspath(request.tex_path)
+    tex_path = os.path.realpath(request.tex_path)
+
+    # Validate the .tex path belongs to this task's work directory
+    db = _get_db()
+    try:
+        from cmbagent.database.models import WorkflowRun
+        parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Task not found")
+        work_dir = (parent.meta or {}).get("work_dir") or _get_work_dir(task_id)
+        work_dir = os.path.realpath(work_dir)
+        if not (tex_path == work_dir or tex_path.startswith(work_dir + os.sep)):
+            raise HTTPException(status_code=403, detail="TeX file path is outside the task's working directory")
+    finally:
+        db.close()
+
     if not os.path.isfile(tex_path):
         raise HTTPException(status_code=404, detail="TeX file not found")
 
@@ -1674,9 +1926,8 @@ async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
                 max_tokens=8192,
             )
 
-        loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            edited = await loop.run_in_executor(executor, _call_llm)
+            edited = await asyncio.get_running_loop().run_in_executor(executor, _call_llm)
 
         return AiEditTexResponse(edited_content=edited or original)
     except Exception as e:
@@ -1699,7 +1950,22 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
     import subprocess
     import shutil
 
-    tex_path = os.path.abspath(request.tex_path)
+    tex_path = os.path.realpath(request.tex_path)
+
+    # Validate the .tex path belongs to this task's work directory
+    db = _get_db()
+    try:
+        from cmbagent.database.models import WorkflowRun
+        parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Task not found")
+        work_dir = (parent.meta or {}).get("work_dir") or _get_work_dir(task_id)
+        work_dir = os.path.realpath(work_dir)
+        if not (tex_path == work_dir or tex_path.startswith(work_dir + os.sep)):
+            raise HTTPException(status_code=403, detail="TeX file path is outside the task's working directory")
+    finally:
+        db.close()
+
     if not os.path.isfile(tex_path):
         raise HTTPException(status_code=404, detail="TeX file not found")
 
@@ -1714,11 +1980,12 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
 
         def run_xelatex():
             result = subprocess.run(
-                ["xelatex", "-interaction=nonstopmode", "-file-line-error", tex_name],
+                ["xelatex", "-no-shell-escape", "-interaction=nonstopmode", "-file-line-error", tex_name],
                 cwd=tex_dir,
                 input="\n",
                 capture_output=True,
                 text=True,
+                timeout=120,  # 2 min timeout per xelatex run
             )
             log_lines.append(result.stdout[-4000:] if result.stdout else "")
             return result.returncode == 0
@@ -1729,6 +1996,7 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
                 cwd=tex_dir,
                 capture_output=True,
                 text=True,
+                timeout=60,  # 1 min timeout for bibtex
             )
 
         ok = run_xelatex()
@@ -1749,9 +2017,8 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
         return success, "\n".join(log_lines)
 
     try:
-        loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            success, log = await loop.run_in_executor(executor, _compile)
+            success, log = await asyncio.get_running_loop().run_in_executor(executor, _compile)
 
         return CompileTexResponse(
             pdf_path=pdf_path if success else None,
@@ -1769,7 +2036,11 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
 
 @router.get("/{task_id}", response_model=DeepresearchTaskStateResponse)
 async def get_task_state(task_id: str):
-    """Get full task state for resume - all stages, costs, and progress."""
+    """Get full task state for resume - all stages, costs, and progress.
+
+    Automatically detects and resets stale 'running' stages (no active
+    background task) so the frontend never sees a permanently stuck stage.
+    """
     db = _get_db()
     try:
         from cmbagent.database.models import WorkflowRun
@@ -1778,6 +2049,29 @@ async def get_task_state(task_id: str):
             raise HTTPException(status_code=404, detail="Task not found")
 
         repo = _get_stage_repo(db, session_id=parent.session_id)
+        stages = repo.list_stages(parent_run_id=task_id)
+
+        # Auto-recover stale "running" stages on read
+        stale_recovered = False
+        for s in stages:
+            if s.status == "running":
+                bg_key = f"{task_id}:{s.stage_number}"
+                has_active_task = bg_key in _running_tasks and not _running_tasks[bg_key].done()
+                if not has_active_task:
+                    logger.warning(
+                        "get_task_state: resetting stale 'running' stage %d for task %s",
+                        s.stage_number, task_id,
+                    )
+                    repo.update_stage_status(
+                        s.id, "failed",
+                        error_message="Execution was interrupted. Click retry to re-run.",
+                    )
+                    stale_recovered = True
+
+        if stale_recovered:
+            db.commit()
+
+        # Refresh stages after possible status updates
         stages = repo.list_stages(parent_run_id=task_id)
         progress = repo.get_task_progress(parent_run_id=task_id)
 

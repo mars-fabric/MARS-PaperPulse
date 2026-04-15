@@ -43,92 +43,93 @@ def extract_pdf_content(pdf_path: str, *, max_chars: int = MAX_EXTRACT_CHARS) ->
     total_len = 0
     num_pages = len(doc)
 
-    for page_idx, page in enumerate(doc):
-        if total_len >= max_chars:
-            parts.append(f"\n\n[... Truncated at {max_chars:,} characters — "
-                         f"{num_pages - page_idx} remaining pages omitted ...]\n")
-            break
+    try:
+        for page_idx, page in enumerate(doc):
+            if total_len >= max_chars:
+                parts.append(f"\n\n[... Truncated at {max_chars:,} characters — "
+                             f"{num_pages - page_idx} remaining pages omitted ...]\n")
+                break
 
-        page_parts: list[str] = []
-        page_num = page_idx + 1
-        page_parts.append(f"\n--- Page {page_num} of {num_pages} ---\n")
+            page_parts: list[str] = []
+            page_num = page_idx + 1
+            page_parts.append(f"\n--- Page {page_num} of {num_pages} ---\n")
 
-        # ─── Tables ──────────────────────────────────────────────────
-        # Extract tables FIRST so we can mark their bounding boxes and
-        # avoid duplicating table text in the plain-text pass.
-        table_rects: list = []
-        try:
-            tables = page.find_tables()
-            for tbl_idx, table in enumerate(tables.tables):
-                table_rects.append(table.bbox)
-                md_table = _table_to_markdown(table)
-                if md_table:
-                    page_parts.append(f"\n**[Table {tbl_idx + 1} on page {page_num}]**\n")
-                    page_parts.append(md_table)
-                    page_parts.append("")
-        except Exception:
-            # find_tables() can fail on unusual page layouts
-            pass
+            # ─── Tables ──────────────────────────────────────────────────
+            # Extract tables FIRST so we can mark their bounding boxes and
+            # avoid duplicating table text in the plain-text pass.
+            table_rects: list = []
+            try:
+                tables = page.find_tables()
+                for tbl_idx, table in enumerate(tables.tables):
+                    table_rects.append(table.bbox)
+                    md_table = _table_to_markdown(table)
+                    if md_table:
+                        page_parts.append(f"\n**[Table {tbl_idx + 1} on page {page_num}]**\n")
+                        page_parts.append(md_table)
+                        page_parts.append("")
+            except Exception:
+                # find_tables() can fail on unusual page layouts
+                pass
 
-        # ─── Text ────────────────────────────────────────────────────
-        # Use block-level extraction to get text while skipping blocks
-        # that overlap with already-extracted tables.
-        try:
-            blocks = page.get_text("blocks")  # list of (x0,y0,x1,y1,text,block_no,block_type)
-            for block in blocks:
-                # block_type 0 = text, 1 = image
-                if block[6] == 0:  # text block
-                    block_rect = fitz.Rect(block[:4])
-                    # Skip if this text block overlaps significantly with a table
-                    if _overlaps_any(block_rect, table_rects):
-                        continue
-                    text = block[4].strip()
+            # ─── Text ────────────────────────────────────────────────────
+            # Use block-level extraction to get text while skipping blocks
+            # that overlap with already-extracted tables.
+            try:
+                blocks = page.get_text("blocks")  # list of (x0,y0,x1,y1,text,block_no,block_type)
+                for block in blocks:
+                    # block_type 0 = text, 1 = image
+                    if block[6] == 0:  # text block
+                        block_rect = fitz.Rect(block[:4])
+                        # Skip if this text block overlaps significantly with a table
+                        if _overlaps_any(block_rect, table_rects):
+                            continue
+                        text = block[4].strip()
+                        if text:
+                            page_parts.append(text)
+            except Exception:
+                # Fallback: plain text extraction
+                try:
+                    text = page.get_text().strip()
                     if text:
                         page_parts.append(text)
-        except Exception:
-            # Fallback: plain text extraction
+                except Exception:
+                    pass
+
+            # ─── Images ──────────────────────────────────────────────────
             try:
-                text = page.get_text().strip()
-                if text:
-                    page_parts.append(text)
+                images = page.get_images(full=True)
+                for img_idx, img_info in enumerate(images):
+                    xref = img_info[0]
+                    try:
+                        base_image = doc.extract_image(xref)
+                        if base_image:
+                            w = base_image.get("width", 0)
+                            h = base_image.get("height", 0)
+                            img_ext = base_image.get("ext", "unknown")
+                            size_bytes = len(base_image.get("image", b""))
+                            size_str = (f"{size_bytes}" if size_bytes < 1024
+                                        else f"{size_bytes/1024:.1f}KB"
+                                        if size_bytes < 1024*1024
+                                        else f"{size_bytes/1024/1024:.1f}MB")
+                            page_parts.append(
+                                f"\n**[Image {img_idx + 1} on page {page_num}: "
+                                f"{w}x{h}px, {img_ext}, {size_str}]** "
+                                f"*(This image may contain a chart, diagram, or figure "
+                                f"relevant to the RFP requirements.)*\n"
+                            )
+                    except Exception:
+                        page_parts.append(
+                            f"\n**[Image {img_idx + 1} on page {page_num}]** "
+                            f"*(Embedded image — could not extract details.)*\n"
+                        )
             except Exception:
                 pass
 
-        # ─── Images ──────────────────────────────────────────────────
-        try:
-            images = page.get_images(full=True)
-            for img_idx, img_info in enumerate(images):
-                xref = img_info[0]
-                try:
-                    base_image = doc.extract_image(xref)
-                    if base_image:
-                        w = base_image.get("width", 0)
-                        h = base_image.get("height", 0)
-                        img_ext = base_image.get("ext", "unknown")
-                        size_bytes = len(base_image.get("image", b""))
-                        size_str = (f"{size_bytes}" if size_bytes < 1024
-                                    else f"{size_bytes/1024:.1f}KB"
-                                    if size_bytes < 1024*1024
-                                    else f"{size_bytes/1024/1024:.1f}MB")
-                        page_parts.append(
-                            f"\n**[Image {img_idx + 1} on page {page_num}: "
-                            f"{w}x{h}px, {img_ext}, {size_str}]** "
-                            f"*(This image may contain a chart, diagram, or figure "
-                            f"relevant to the RFP requirements.)*\n"
-                        )
-                except Exception:
-                    page_parts.append(
-                        f"\n**[Image {img_idx + 1} on page {page_num}]** "
-                        f"*(Embedded image — could not extract details.)*\n"
-                    )
-        except Exception:
-            pass
-
-        page_text = "\n".join(page_parts)
-        parts.append(page_text)
-        total_len += len(page_text)
-
-    doc.close()
+            page_text = "\n".join(page_parts)
+            parts.append(page_text)
+            total_len += len(page_text)
+    finally:
+        doc.close()
 
     result = "\n".join(parts).strip()
     if not result:

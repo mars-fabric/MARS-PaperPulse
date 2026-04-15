@@ -54,7 +54,8 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
     if (!description.trim()) return
     // createTask updates the description if task already exists, or creates fresh
     const id = await createTask(description, undefined)
-    if (id) await executeStage(1, id)
+    if (!id) return // creation failed — stay on this step, error is shown by hook
+    await executeStage(1, id)
     onNext()
   }, [description, createTask, executeStage, onNext])
 

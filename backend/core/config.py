@@ -15,7 +15,8 @@ class Settings:
     app_title: str = "CMBAgent API"
     app_version: str = "1.0.0"
 
-    # CORS settings
+    # CORS settings — production-safe defaults (no wildcard).
+    # Set CMBAGENT_CORS_ORIGINS env var to override (comma-separated).
     cors_origins: List[str] = field(default_factory=lambda: [
         "http://localhost:3000",
         "http://localhost:3001",
@@ -27,7 +28,6 @@ class Settings:
         "http://127.0.0.1:3002",
         "http://127.0.0.1:3003",
         "http://127.0.0.1:3004",
-        "*",  # Allow all origins for development
     ])
 
     # Default work directory
@@ -56,7 +56,10 @@ class Settings:
         cors_env = os.getenv("CMBAGENT_CORS_ORIGINS")
         if cors_env:
             self.cors_origins = [origin.strip() for origin in cors_env.split(",")]
-        self.max_file_size_mb = int(os.getenv("CMBAGENT_MAX_FILE_SIZE_MB", str(self.max_file_size_mb)))
+        try:
+            self.max_file_size_mb = int(os.getenv("CMBAGENT_MAX_FILE_SIZE_MB", str(self.max_file_size_mb)))
+        except (ValueError, TypeError):
+            pass  # Keep default if env var is not a valid integer
         self.debug = os.getenv("CMBAGENT_DEBUG", "false").lower() == "true"
 
         # Azure OpenAI settings

@@ -1,9 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { Send, Check, Loader2 } from 'lucide-react'
-import { Button } from '@/components/core'
-import type { useDeepresearchTask } from '@/hooks/useDeepresearchTask'
+import { Send, Check, Loader2, AlertTriangle } from 'lucide-react'
 import type { RefinementMessage } from '@/types/deepresearch'
 
 interface RefinementChatProps {
@@ -11,6 +9,61 @@ interface RefinementChatProps {
   onSend: (message: string) => Promise<string | null>
   onApply: (content: string) => void
   isLoading?: boolean
+}
+
+/**
+ * Small inline badge showing how the refinement was produced.
+ * - diff with 0 failures  → green "N edit(s) applied"
+ * - diff with failures     → amber warning
+ * - fallback               → neutral "full rewrite"
+ */
+function MethodBadge({ msg }: { msg: RefinementMessage }) {
+  if (!msg.method) return null
+
+  if (msg.method === 'diff') {
+    const applied = msg.edits_applied ?? 0
+    const failed = msg.edits_failed ?? 0
+
+    return (
+      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded"
+          style={{
+            backgroundColor: 'var(--mars-color-success-subtle, #dcfce7)',
+            color: 'var(--mars-color-success, #16a34a)',
+          }}
+        >
+          <Check className="w-2.5 h-2.5" />
+          {applied} edit{applied !== 1 ? 's' : ''} applied
+        </span>
+        {failed > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded"
+            style={{
+              backgroundColor: 'var(--mars-color-warning-subtle, #fef9c3)',
+              color: 'var(--mars-color-warning, #ca8a04)',
+            }}
+          >
+            <AlertTriangle className="w-2.5 h-2.5" />
+            {failed} edit{failed !== 1 ? 's' : ''} could not be located
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // fallback method
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded mt-1.5"
+      style={{
+        backgroundColor: 'var(--mars-color-surface-overlay)',
+        color: 'var(--mars-color-text-secondary)',
+      }}
+    >
+      full rewrite (diff not possible)
+    </span>
+  )
 }
 
 export default function RefinementChat({ messages, onSend, onApply, isLoading }: RefinementChatProps) {
@@ -91,14 +144,17 @@ export default function RefinementChat({ messages, onSend, onApply, isLoading }:
             >
               <p className="whitespace-pre-wrap">{msg.content}</p>
               {msg.role === 'assistant' && (
-                <button
-                  onClick={() => onApply(msg.content)}
-                  className="mt-2 flex items-center gap-1 text-xs font-medium"
-                  style={{ color: 'var(--mars-color-primary)' }}
-                >
-                  <Check className="w-3 h-3" />
-                  Apply to editor
-                </button>
+                <>
+                  <MethodBadge msg={msg} />
+                  <button
+                    onClick={() => onApply(msg.content)}
+                    className="mt-2 flex items-center gap-1 text-xs font-medium"
+                    style={{ color: 'var(--mars-color-primary)' }}
+                  >
+                    <Check className="w-3 h-3" />
+                    Apply to editor
+                  </button>
+                </>
               )}
             </div>
           </div>

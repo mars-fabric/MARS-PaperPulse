@@ -1175,38 +1175,58 @@ async def update_stage_content(task_id: str, stage_num: int, request: Deepresear
 
 @router.post("/{task_id}/stages/{stage_num}/refine", response_model=DeepresearchRefineResponse)
 async def refine_stage_content(task_id: str, stage_num: int, request: DeepresearchRefineRequest):
-    """Use LLM to refine stage content based on user instruction.
+    """Use LLM to refine stage content via diff-based patching.
 
-    This is a single LLM call (not a full phase execution).
-    Returns the refined content for the user to review and apply.
+    Flow:
+      1. Ask the LLM for a JSON array of find→replace edits.
+      2. Apply patches to the original content (unchanged text stays byte-identical).
+      3. If JSON parsing or all patches fail, fall back to a full-document rewrite.
+
+    Returns the refined content plus metadata about how it was produced.
     """
     import concurrent.futures
+    from services.diff_patcher import refine_with_diff
 
-    prompt = (
-        "You are helping a researcher refine their work. "
-        "Below is their current content, followed by their edit request.\n\n"
-        f"--- CURRENT CONTENT ---\n{request.content}\n\n"
-        f"--- USER REQUEST ---\n{request.message}\n\n"
-        "Please provide the refined version of the content. "
-        "Return ONLY the refined content, no explanations or preamble."
-    )
+    def _llm_call(messages, model, temperature, max_tokens):
+        from cmbagent.llm_provider import safe_completion
+        return safe_completion(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     try:
-        def _call_llm():
-            from cmbagent.llm_provider import safe_completion
-            return safe_completion(
-                messages=[{"role": "user", "content": prompt}],
+        def _run():
+            return refine_with_diff(
+                content=request.content,
+                user_request=request.message,
+                llm_call=_llm_call,
                 model="gpt-4o",
-                temperature=0.7,
-                max_tokens=4096,
+                temperature=0.4,
+                fallback_temperature=0.7,
             )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            refined = await asyncio.get_running_loop().run_in_executor(executor, _call_llm)
+            result = await asyncio.get_running_loop().run_in_executor(executor, _run)
+
+        edits_applied = len(result.applied)
+        edits_failed = len(result.failed)
+        method = result.method
+
+        if method == "diff":
+            msg = f"Applied {edits_applied} edit(s) via diff patching"
+            if edits_failed:
+                msg += f" ({edits_failed} edit(s) could not be located)"
+        else:
+            msg = "Content refined via full-document rewrite (diff patching was not possible)"
 
         return DeepresearchRefineResponse(
-            refined_content=refined,
-            message="Content refined successfully",
+            refined_content=result.content,
+            message=msg,
+            method=method,
+            edits_applied=edits_applied,
+            edits_failed=edits_failed,
         )
     except Exception as e:
         logger.error("deepresearch_refine_failed error=%s", e)
@@ -1318,8 +1338,9 @@ async def save_file_context(task_id: str, request: RefineContextRequest):
 
 @router.post("/{task_id}/refine-context", response_model=RefineContextResponse)
 async def refine_file_context(task_id: str, request: RefineContextRequest):
-    """Use LLM to refine the data context according to user instruction, then save."""
+    """Use LLM to refine the data context via diff-based patching, then save."""
     import concurrent.futures
+    from services.diff_patcher import refine_with_diff
 
     db = _get_db()
     try:
@@ -1331,33 +1352,34 @@ async def refine_file_context(task_id: str, request: RefineContextRequest):
     finally:
         db.close()
 
-    prompt = (
-        "You are helping a researcher refine their research data context document.\n"
-        "Below is their current data context, followed by their refinement request.\n\n"
-        f"--- CURRENT DATA CONTEXT ---\n{request.content}\n\n"
-        f"--- USER REQUEST ---\n{request.message}\n\n"
-        "Update the data context according to the request. Keep the structured markdown format. "
-        "Return ONLY the updated document, no preamble or explanation."
-    )
+    def _llm_call(messages, model, temperature, max_tokens):
+        from cmbagent.llm_provider import safe_completion
+        return safe_completion(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     try:
-        def _call():
-            from cmbagent.llm_provider import safe_completion
-            return safe_completion(
-                messages=[{"role": "user", "content": prompt}],
+        def _run():
+            return refine_with_diff(
+                content=request.content,
+                user_request=request.message,
+                llm_call=_llm_call,
                 model="gpt-4o",
                 temperature=0.4,
-                max_tokens=4096,
+                fallback_temperature=0.4,
             )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            refined = await asyncio.get_running_loop().run_in_executor(executor, _call)
+            result = await asyncio.get_running_loop().run_in_executor(executor, _run)
 
         ctx_path = os.path.join(work_dir, "input_files", "data_context.md")
         with open(ctx_path, 'w', encoding='utf-8') as f:
-            f.write(refined)
+            f.write(result.content)
 
-        return RefineContextResponse(refined_content=refined)
+        return RefineContextResponse(refined_content=result.content)
     except Exception as e:
         logger.error("deepresearch_refine_context_failed error=%s", e)
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")

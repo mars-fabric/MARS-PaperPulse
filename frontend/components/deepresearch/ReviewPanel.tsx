@@ -119,13 +119,29 @@ export default function ReviewPanel({
     return refineContent(stageNum, message, editableContent)
   }, [refineContent, stageNum, editableContent])
 
-  // Apply refined content from chat
+  // Apply refined content from chat — with safety check for partial responses
   const handleApply = useCallback((content: string) => {
+    const originalLen = editableContent.length
+    const refinedLen = content.length
+
+    // Guard: if refined content is drastically shorter than original (and original
+    // is substantial), the LLM likely returned only the changed fragment instead of
+    // the full document.  Ask the user before overwriting.
+    if (originalLen > 200 && refinedLen < originalLen * 0.4) {
+      const confirmed = window.confirm(
+        `The refined content is much shorter than the original ` +
+        `(${refinedLen} vs ${originalLen} characters).\n\n` +
+        `The AI may have returned only the changed portion instead of the full document. ` +
+        `Apply anyway?`
+      )
+      if (!confirmed) return
+    }
+
     setEditableContent(content)
     if (canEdit) {
       saveStageContent(stageNum, content, sharedKey)
     }
-  }, [setEditableContent, canEdit, saveStageContent, stageNum, sharedKey])
+  }, [editableContent, setEditableContent, canEdit, saveStageContent, stageNum, sharedKey])
 
   // Handle next with save — also auto-triggers next stage execution
   const handleNext = useCallback(async () => {

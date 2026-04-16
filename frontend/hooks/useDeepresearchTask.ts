@@ -338,12 +338,15 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
         body: JSON.stringify({ message, content }),
       })
 
-      // Add assistant response
+      // Add assistant response with diff metadata
       const assistantMsg: RefinementMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         content: resp.refined_content,
         timestamp: Date.now(),
+        method: resp.method,
+        edits_applied: resp.edits_applied,
+        edits_failed: resp.edits_failed,
       }
       setRefinementMessages(prev => [...prev, assistantMsg])
       return resp.refined_content

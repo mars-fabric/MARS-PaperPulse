@@ -43,6 +43,10 @@ export interface DeepresearchCreateResponse {
 export interface DeepresearchRefineResponse {
   refined_content: string
   message: string
+  /** 'diff' = surgical patches applied, 'fallback' = full-document rewrite */
+  method: 'diff' | 'fallback'
+  edits_applied: number
+  edits_failed: number
 }
 
 export interface RefinementMessage {
@@ -50,6 +54,10 @@ export interface RefinementMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  /** Present on assistant messages — how the refinement was produced */
+  method?: 'diff' | 'fallback'
+  edits_applied?: number
+  edits_failed?: number
 }
 
 export interface UploadedFile {

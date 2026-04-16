@@ -82,6 +82,9 @@ class DeepresearchRefineResponse(BaseModel):
     """Response for POST /api/deepresearch/{task_id}/stages/{num}/refine"""
     refined_content: str
     message: str = "Content refined successfully"
+    method: str = Field("diff", description="'diff' = surgical patches applied, 'fallback' = full-document rewrite")
+    edits_applied: int = Field(0, description="Number of diff edits successfully applied")
+    edits_failed: int = Field(0, description="Number of diff edits that could not be located in the document")
 
 
 class DeepresearchTaskStateResponse(BaseModel):

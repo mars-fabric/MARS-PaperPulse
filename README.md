@@ -20,7 +20,9 @@ Each stage builds on the previous one. Researchers can review, refine, and itera
 ## Key Features
 
 - **Interactive 4-stage research pipeline** with human review at each step
-- **Multi-LLM support** — OpenAI (GPT-4, GPT-4o), Google Gemini, Anthropic Claude, Azure OpenAI
+- **6 LLM providers** — OpenAI, Azure OpenAI, Anthropic Claude, Google Gemini, Mistral, AWS Bedrock
+- **Provider Settings UI** — configure, test, and manage LLM credentials from the browser (gear icon in top bar)
+- **Encrypted credential vault** — AES-256-GCM encrypted storage for API keys, synced to the ProviderRegistry at startup
 - **Real-time console streaming** via WebSocket during stage execution
 - **AI-powered refinement chat** for iterating on generated content
 - **File upload and context analysis** — upload datasets, papers, or notes for AI to incorporate
@@ -35,7 +37,9 @@ Each stage builds on the previous one. Researchers can review, refine, and itera
 |-------|-----------|
 | **Frontend** | Next.js 16, React 18, TypeScript, Tailwind CSS |
 | **Backend** | FastAPI, Python 3.12+, Uvicorn |
-| **AI Orchestration** | LangGraph (multi-agent pipelines) |
+| **AI Orchestration** | LangGraph (multi-agent pipelines), mars_cmbagent ProviderRegistry |
+| **LLM Providers** | OpenAI, Azure OpenAI, Anthropic, Google Gemini, Mistral, AWS Bedrock |
+| **Credentials** | AES-256-GCM encrypted vault (cryptography >= 42.0) |
 | **Real-time** | Socket.IO / WebSocket |
 | **Database** | SQLite (default), PostgreSQL/MySQL (configurable) |
 | **PDF** | LaTeX compilation, html2pdf.js |
@@ -54,8 +58,11 @@ MARS-PaperPulse/
 │   │   ├── core/                 # Design system (Button, Modal, Tabs...)
 │   │   └── layout/               # App shell, nav, top bar
 │   ├── hooks/                    # React hooks (task state, models, events)
+│   │   ├── useProviders.ts       # Provider CRUD + cache invalidation
+│   │   └── useModelConfig.ts     # Provider-filtered model dropdowns
 │   ├── contexts/                 # Theme, WebSocket providers
 │   ├── types/                    # TypeScript definitions
+│   │   └── providers.ts          # Provider system interfaces
 │   └── lib/                      # Config, API utilities
 │
 ├── backend/                      # FastAPI application
@@ -64,14 +71,19 @@ MARS-PaperPulse/
 │   │   ├── deepresearch.py       # Core wizard endpoints
 │   │   ├── files.py              # File management
 │   │   ├── credentials.py        # API key management
-│   │   └── models.py             # Model availability
+│   │   ├── models.py             # Model availability
+│   │   └── providers.py          # Multi-provider credential management (7 endpoints)
+│   ├── services/
+│   │   ├── credential_vault.py   # AES-256-GCM encrypted credential storage
+│   │   └── config_bridge.py      # Syncs vault + .env -> ProviderRegistry
+│   ├── models/
+│   │   └── provider_schemas.py   # Pydantic models for provider API
 │   ├── task_framework/
 │   │   ├── phases/               # Stage execution logic
 │   │   ├── paper_agents/         # LangGraph paper generation pipeline
 │   │   ├── langgraph_agents/     # Multi-agent orchestration
 │   │   └── prompts/              # Structured prompts per stage
 │   ├── core/                     # App factory, config, logging
-│   ├── services/                 # Session management, PDF extraction
 │   └── websocket/                # Event handling
 │
 ├── .env.example                  # Environment config template
@@ -90,7 +102,7 @@ MARS-PaperPulse/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/UJ2202/MARS-PaperPulse.git
+git clone https://github.com//MARS-PaperPulse.git
 cd MARS-PaperPulse
 ```
 
@@ -100,13 +112,29 @@ cd MARS-PaperPulse
 cp .env.example .env
 ```
 
-Edit `.env` and add your API keys:
+Edit `.env` and add your API keys (you only need one provider to get started):
 
 ```env
+# At least one provider required
 OPENAI_API_KEY="your-key-here"
-ANTHROPIC_API_KEY="your-key-here"      # optional
-GEMINI_API_KEY="your-key-here"          # optional
+ANTHROPIC_API_KEY="your-key-here"        # optional
+GEMINI_API_KEY="your-key-here"           # optional
+MISTRAL_API_KEY="your-key-here"          # optional
+
+# Azure OpenAI (optional — overrides OpenAI for gpt-* models)
+AZURE_OPENAI_API_KEY="your-azure-key"
+AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
+
+# AWS Bedrock (optional)
+AWS_ACCESS_KEY_ID="AKIA..."
+AWS_SECRET_ACCESS_KEY="your-secret"
+AWS_DEFAULT_REGION="us-east-1"
+
+# Credential vault encryption key (recommended for production)
+MARS_CREDENTIAL_KEY="generate-with-openssl-rand-base64-32"
 ```
+
+> **Alternative:** Skip `.env` entirely and configure providers via the Settings UI (gear icon in the top bar). Credentials are encrypted and persisted locally.
 
 ### 3. Backend setup
 
@@ -132,6 +160,8 @@ Frontend runs at `http://localhost:3000`.
 
 ## API Endpoints
 
+### Deep Research
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/deepresearch/create` | Create a new research task |
@@ -142,18 +172,56 @@ Frontend runs at `http://localhost:3000`.
 | `GET` | `/api/deepresearch/recent` | Recent tasks |
 | `DELETE` | `/api/deepresearch/{id}` | Delete task |
 
+### Provider Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/providers` | List all 6 providers with status + credential schema |
+| `GET` | `/api/providers/{id}` | Single provider detail |
+| `POST` | `/api/providers/{id}/credentials` | Store credentials (encrypted vault + registry sync) |
+| `POST` | `/api/providers/{id}/test` | Test credentials without storing |
+| `DELETE` | `/api/providers/{id}/credentials` | Remove stored credentials |
+| `GET` | `/api/providers/models/available` | Models from all configured providers |
+| `POST` | `/api/providers/sync` | Force re-sync .env + vault to registry |
+
+### Model Configuration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/models/config` | Full model config (defaults, workflow overrides) |
+| `GET` | `/api/models/available` | Available model list |
+| `POST` | `/api/models/reload` | Hot-reload model config from YAML |
+
 Full interactive docs available at `http://localhost:8000/docs` when the backend is running.
 
 ## Configuration
 
 See [.env.example](.env.example) for all available configuration options including:
 
-- AI provider API keys
-- Work directory paths
-- CORS settings
-- Database URL (SQLite, PostgreSQL, MySQL)
-- Logging level and format
-- File upload size limits
+- **LLM Provider API keys** — OpenAI, Anthropic, Gemini, Mistral, Azure OpenAI, AWS Bedrock
+- **Credential vault encryption** — `MARS_CREDENTIAL_KEY` for portable AES-256-GCM encryption
+- **Work directory paths** — where task outputs, logs, and credentials are stored
+- **CORS settings** — allowed origins for frontend
+- **Database URL** — SQLite (default), PostgreSQL, MySQL
+- **Logging level and format**
+- **File upload size limits**
+
+### Provider Priority
+
+Credentials are loaded in this order (highest priority wins):
+
+1. **Settings UI** (stored in encrypted vault)
+2. **`.env` file** (loaded on startup)
+3. **System environment variables**
+
+### Adding a New Provider
+
+To add a new LLM provider (e.g., Cohere):
+
+1. Create `cmbagent/providers/cohere_provider.py` implementing `LLMProviderAdapter`
+2. Register it in `registry.py:_register_builtins()`
+
+That's it. The backend API auto-discovers it, the frontend auto-renders the credential form, and model dropdowns auto-include its models.
 
 ## License
 

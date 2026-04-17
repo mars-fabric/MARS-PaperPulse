@@ -1,4 +1,5 @@
-mars_cmbagent
+mars_cmbagent>=1.1.1
 python-dotenv
 pymupdf
 pypdf
+cryptography>=42.0.0

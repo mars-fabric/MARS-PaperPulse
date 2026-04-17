@@ -64,10 +64,20 @@ def _recover_stale_running_stages():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """App lifespan: re-apply logging after uvicorn overrides it, recover stale stages."""
+    """App lifespan: re-apply logging after uvicorn overrides it, sync credentials, recover stale stages."""
     configure_logging(**_log_config)
     import logging
-    logging.getLogger(__name__).info("Backend started, logs writing to %s", _log_config.get("log_file", "console"))
+    log = logging.getLogger(__name__)
+    log.info("Backend started, logs writing to %s", _log_config.get("log_file", "console"))
+
+    # Sync credentials from vault + .env -> cmbagent ProviderRegistry
+    try:
+        from services.config_bridge import ConfigBridge
+        sync_results = ConfigBridge.sync_all()
+        log.info("Credential sync on startup: %s", sync_results)
+    except Exception as exc:
+        log.warning("Credential sync failed on startup (non-fatal): %s", exc)
+
     _recover_stale_running_stages()
     yield
 

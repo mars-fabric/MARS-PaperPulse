@@ -102,6 +102,7 @@ export interface ModelOption {
 }
 
 export const AVAILABLE_MODELS: ModelOption[] = [
+  // OpenAI
   { value: 'gpt-4.1-2025-04-14', label: 'GPT-4.1' },
   { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
   { value: 'gpt-4o', label: 'GPT-4o' },
@@ -109,11 +110,18 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { value: 'gpt-4.5-preview-2025-02-27', label: 'GPT-4.5 Preview' },
   { value: 'gpt-5-2025-08-07', label: 'GPT-5' },
   { value: 'o3-mini-2025-01-31', label: 'o3-mini' },
+  // Google Gemini
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  // Anthropic
   { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
   { value: 'claude-3.5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+  // AWS Bedrock
+  { value: 'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2 (Bedrock)' },
+  { value: 'bedrock/anthropic.claude-sonnet-4-20250514-v1:0', label: 'Claude Sonnet 4 (Bedrock)' },
+  { value: 'bedrock/amazon.nova-pro-v1:0', label: 'Amazon Nova Pro (Bedrock)' },
+  { value: 'bedrock/amazon.nova-lite-v1:0', label: 'Amazon Nova Lite (Bedrock)' },
 ]
 
 /** Config overrides for all Deepresearch stages */

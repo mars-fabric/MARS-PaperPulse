@@ -7,6 +7,7 @@ from routers.files import router as files_router
 from routers.credentials import router as credentials_router
 from routers.deepresearch import router as deepresearch_router
 from routers.models import router as models_router
+from routers.providers import router as providers_router
 
 
 def register_routers(app):
@@ -16,6 +17,7 @@ def register_routers(app):
     app.include_router(credentials_router)
     app.include_router(deepresearch_router)
     app.include_router(models_router)
+    app.include_router(providers_router)
 
 
 __all__ = [
@@ -25,4 +27,5 @@ __all__ = [
     "credentials_router",
     "deepresearch_router",
     "models_router",
+    "providers_router",
 ]

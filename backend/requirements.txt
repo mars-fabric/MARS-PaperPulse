@@ -24,7 +24,7 @@ pypdf>=4.0.0
 cryptography>=42.0.0
 
 # CMB Agent (LLM provider registry + orchestration)
-mars_cmbagent>=1.1.1
+mars_cmbagent>=1.1.2
 
 # Test dependencies
 pytest>=8.0.0

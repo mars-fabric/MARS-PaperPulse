@@ -102,18 +102,45 @@ async def get_provider_detail(provider_id: str):
 async def store_provider_credentials(
     provider_id: str, body: ProviderCredentialInput
 ):
-    """Store credentials for a provider, persist to vault, sync to registry."""
+    """Store credentials for a provider, persist to vault, sync to registry.
+
+    If registry sync fails with an unexpected error (not an invalid-credentials
+    result), roll back the vault write so we don't persist orphaned credentials
+    that fail to sync at every startup.
+    """
     vault = _get_vault()
     bridge = _get_bridge()
+    registry = _get_registry()
+
+    # Verify provider exists before touching vault
+    known_providers = {p["provider_id"] for p in registry.list_providers()}
+    if provider_id not in known_providers:
+        raise HTTPException(
+            status_code=404, detail=f"Provider '{provider_id}' not found"
+        )
+
+    # Capture prior credentials for rollback
+    had_prior = bool(vault.get(provider_id))
+    prior_creds = vault.get(provider_id) if had_prior else None
 
     # Store in vault (encrypted persistence)
     vault.set(provider_id, body.credentials)
 
-    # Sync to registry + validate
-    result = await bridge.sync_and_validate(provider_id)
+    # Sync to registry + validate. Rollback on unexpected exceptions.
+    try:
+        result = await bridge.sync_and_validate(provider_id)
+    except Exception as exc:
+        logger.exception("sync_and_validate failed for %s; rolling back vault write", provider_id)
+        if had_prior and prior_creds is not None:
+            vault.set(provider_id, prior_creds)
+        else:
+            vault.remove(provider_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to sync credentials: {exc}",
+        )
 
     # Count models from this provider
-    registry = _get_registry()
     models_added = 0
     for p in registry.list_providers():
         if p["provider_id"] == provider_id:
@@ -146,14 +173,28 @@ async def test_provider_credentials(
             status_code=404, detail=f"Provider '{provider_id}' not found"
         )
 
-    # Get the adapter and test directly
-    adapter = registry._adapters.get(provider_id)
+    # Access the adapter. `_adapters` is private but the registry exposes no
+    # public "test arbitrary credentials without persisting" method. Guard the
+    # access so a registry refactor surfaces a clear error instead of AttributeError.
+    adapters = getattr(registry, "_adapters", None)
+    adapter = adapters.get(provider_id) if adapters else None
     if not adapter:
         raise HTTPException(
             status_code=404, detail=f"Provider adapter '{provider_id}' not found"
         )
 
-    result = await adapter.test_credentials(body.credentials)
+    try:
+        result = await adapter.test_credentials(body.credentials)
+    except Exception as exc:
+        logger.exception("Adapter test_credentials raised for %s", provider_id)
+        return {
+            "success": False,
+            "message": f"Test failed: {exc}",
+            "latency_ms": None,
+            "error_details": str(exc),
+            "models_available": None,
+            "timestamp": time.time(),
+        }
 
     return {
         "success": result.success,

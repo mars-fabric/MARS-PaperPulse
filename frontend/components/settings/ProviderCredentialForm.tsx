@@ -5,7 +5,6 @@ import type { CredentialField, ProviderTestResult } from '@/types/providers'
 
 interface ProviderCredentialFormProps {
   providerName: string
-  providerId: string
   fields: CredentialField[]
   onTest: (creds: Record<string, string>) => Promise<ProviderTestResult>
   onSave: (creds: Record<string, string>) => Promise<{ status: string; message: string }>
@@ -14,7 +13,6 @@ interface ProviderCredentialFormProps {
 
 export default function ProviderCredentialForm({
   providerName,
-  providerId,
   fields,
   onTest,
   onSave,
@@ -30,10 +28,12 @@ export default function ProviderCredentialForm({
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
+    setSaveError(null)
     try {
       const result = await onTest(values)
       setTestResult(result)
@@ -49,10 +49,12 @@ export default function ProviderCredentialForm({
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveError(null)
     try {
       await onSave(values)
-    } catch {
-      // Error handled by parent
+      // onSave closes the form on success; nothing more to do.
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -183,6 +185,22 @@ export default function ProviderCredentialForm({
               {testResult.error_details}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Save Error */}
+      {saveError && (
+        <div
+          role="alert"
+          className="rounded-lg px-3 py-2 text-xs"
+          style={{
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            color: '#ef4444',
+            border: '1px solid rgba(239,68,68,0.2)',
+          }}
+        >
+          <div className="font-medium">Failed to save credentials</div>
+          <div className="mt-0.5 opacity-80 break-all">{saveError}</div>
         </div>
       )}
 

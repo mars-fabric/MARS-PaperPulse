@@ -9,9 +9,10 @@
  *   availableModels    — models from configured providers (for UI dropdowns)
  *   activeProvider     — the primary active provider ID
  *   isLoading          — true on first fetch
+ *   error              — last fetch/mutation error (or null)
  *   testProvider()     — test credentials without storing
- *   saveCredentials()  — store credentials (vault + registry sync)
- *   removeCredentials() — remove stored credentials
+ *   saveCredentials()  — store credentials (vault + registry sync); throws on failure
+ *   removeCredentials() — remove stored credentials; throws on failure
  *   refreshProviders() — force refresh from backend
  */
 
@@ -22,23 +23,46 @@ import type {
   ProvidersListResponse,
 } from '@/types/providers'
 import { invalidateModelConfigCache } from '@/hooks/useModelConfig'
+import { apiFetchWithRetry } from '@/lib/fetchWithRetry'
 
-// Module-level cache for the provider list
+// Module-level cache for the provider list (one fetch per browser session)
 let _providersCache: ProvidersListResponse | null = null
+
+async function extractErrorMessage(resp: Response): Promise<string> {
+  try {
+    const text = await resp.text()
+    if (!text) return `HTTP ${resp.status}`
+    try {
+      const parsed = JSON.parse(text)
+      return parsed.detail || parsed.message || parsed.error || text
+    } catch {
+      return text
+    }
+  } catch {
+    return `HTTP ${resp.status}`
+  }
+}
 
 export function useProviders() {
   const [data, setData] = useState<ProvidersListResponse | null>(_providersCache)
   const [isLoading, setIsLoading] = useState(_providersCache === null)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchProviders = useCallback(async () => {
     try {
-      const resp = await fetch('/api/providers')
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const resp = await apiFetchWithRetry('/api/providers')
+      if (!resp.ok) {
+        const msg = await extractErrorMessage(resp)
+        throw new Error(msg)
+      }
       const json: ProvidersListResponse = await resp.json()
       _providersCache = json
       setData(json)
+      setError(null)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
       console.error('Failed to fetch providers:', err)
+      setError(msg)
     } finally {
       setIsLoading(false)
     }
@@ -58,16 +82,25 @@ export function useProviders() {
       providerId: string,
       credentials: Record<string, string>
     ): Promise<ProviderTestResult> => {
-      const resp = await fetch(`/api/providers/${providerId}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentials }),
-      })
-      if (!resp.ok) {
-        const text = await resp.text()
-        return { success: false, message: `HTTP ${resp.status}: ${text}` }
+      try {
+        const resp = await apiFetchWithRetry(
+          `/api/providers/${encodeURIComponent(providerId)}/test`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ credentials }),
+          }
+        )
+        if (!resp.ok) {
+          const msg = await extractErrorMessage(resp)
+          return { success: false, message: `HTTP ${resp.status}: ${msg}` }
+        }
+        return (await resp.json()) as ProviderTestResult
+      } catch (err) {
+        return {
+          success: false,
+          message: `Network error: ${err instanceof Error ? err.message : String(err)}`,
+        }
       }
-      return resp.json()
     },
     []
   )
@@ -77,26 +110,40 @@ export function useProviders() {
       providerId: string,
       credentials: Record<string, string>
     ): Promise<{ status: string; message: string }> => {
-      const resp = await fetch(`/api/providers/${providerId}/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentials }),
-      })
+      const resp = await apiFetchWithRetry(
+        `/api/providers/${encodeURIComponent(providerId)}/credentials`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ credentials }),
+        }
+      )
+      if (!resp.ok) {
+        const msg = await extractErrorMessage(resp)
+        throw new Error(msg)
+      }
       const json = await resp.json()
       // Invalidate both provider and model caches, then refresh
       _providersCache = null
       invalidateModelConfigCache()
       await fetchProviders()
-      return json
+      return {
+        status: json.status ?? 'success',
+        message: json.provider?.message ?? '',
+      }
     },
     [fetchProviders]
   )
 
   const removeCredentials = useCallback(
     async (providerId: string): Promise<void> => {
-      await fetch(`/api/providers/${providerId}/credentials`, {
-        method: 'DELETE',
-      })
+      const resp = await apiFetchWithRetry(
+        `/api/providers/${encodeURIComponent(providerId)}/credentials`,
+        { method: 'DELETE' }
+      )
+      if (!resp.ok) {
+        const msg = await extractErrorMessage(resp)
+        throw new Error(msg)
+      }
       _providersCache = null
       invalidateModelConfigCache()
       await fetchProviders()
@@ -107,6 +154,7 @@ export function useProviders() {
   const refreshProviders = useCallback(async () => {
     _providersCache = null
     setIsLoading(true)
+    setError(null)
     await fetchProviders()
   }, [fetchProviders])
 
@@ -138,6 +186,7 @@ export function useProviders() {
     availableModels: dedupedModels,
     activeProvider: data?.active_provider ?? null,
     isLoading,
+    error,
     testProvider,
     saveCredentials,
     removeCredentials,

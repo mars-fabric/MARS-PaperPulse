@@ -68,6 +68,7 @@ class ProvidersListResponse(BaseModel):
     providers: List[Dict[str, Any]]
     active_provider: Optional[str] = None
     total_models: int = 0
+    timestamp: float = 0
 
 
 class ProviderStoreResponse(BaseModel):
@@ -80,11 +81,20 @@ class ProviderStoreResponse(BaseModel):
 
 class AvailableModelsResponse(BaseModel):
     """Response for GET /api/providers/models/available."""
-    models: List[Dict[str, str]]
+    models: List[Dict[str, Any]]
     provider_count: int = 0
+    timestamp: float = 0
 
 
 class SyncResponse(BaseModel):
     """Response for POST /api/providers/sync."""
     status: str
     results: Dict[str, str]
+    timestamp: float = 0
+
+
+class RemoveCredentialsResponse(BaseModel):
+    """Response for DELETE /api/providers/{id}/credentials."""
+    status: str
+    message: str
+    timestamp: float = 0

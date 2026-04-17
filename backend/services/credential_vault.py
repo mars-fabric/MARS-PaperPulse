@@ -13,6 +13,7 @@ import os
 import json
 import hashlib
 import logging
+import threading
 from typing import Dict, Optional
 from pathlib import Path
 
@@ -23,7 +24,7 @@ _CREDENTIAL_KEY_ENV = "MARS_CREDENTIAL_KEY"
 
 class CredentialVault:
     """
-    Singleton encrypted credential store.
+    Thread-safe singleton encrypted credential store.
 
     Stores provider credentials as:
     {
@@ -35,11 +36,16 @@ class CredentialVault:
     """
 
     _instance: Optional["CredentialVault"] = None
+    _singleton_lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
+        # Double-checked locking: fast path skips the lock when already initialized.
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            with cls._singleton_lock:
+                if cls._instance is None:
+                    inst = super().__new__(cls)
+                    inst._initialized = False
+                    cls._instance = inst
         return cls._instance
 
     def __init__(self, base_dir: str = None):
@@ -53,12 +59,15 @@ class CredentialVault:
         self._config_dir = os.path.join(self._base_dir, "config")
         self._cred_file = os.path.join(self._config_dir, "credentials.enc")
         self._credentials: Dict[str, Dict[str, str]] = {}
+        # Guards read-modify-write of _credentials + disk I/O in _save().
+        self._write_lock = threading.Lock()
         self._load()
 
     @classmethod
     def reset(cls) -> None:
         """Reset the singleton (for testing only)."""
-        cls._instance = None
+        with cls._singleton_lock:
+            cls._instance = None
 
     def _get_encryption_key(self) -> bytes:
         """Get or derive the 32-byte encryption key."""
@@ -129,13 +138,15 @@ class CredentialVault:
 
     def set(self, provider_id: str, credentials: Dict[str, str]) -> None:
         """Store credentials for a provider and persist."""
-        self._credentials[provider_id] = credentials
-        self._save()
+        with self._write_lock:
+            self._credentials[provider_id] = credentials
+            self._save()
 
     def remove(self, provider_id: str) -> None:
         """Remove credentials for a provider."""
-        self._credentials.pop(provider_id, None)
-        self._save()
+        with self._write_lock:
+            self._credentials.pop(provider_id, None)
+            self._save()
 
     def list_configured(self) -> Dict[str, bool]:
         """Return which providers have stored credentials."""

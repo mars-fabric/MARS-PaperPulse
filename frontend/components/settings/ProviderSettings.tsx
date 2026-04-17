@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { X } from 'lucide-react'
+import Modal from '@/components/core/Modal'
 import { useProviders } from '@/hooks/useProviders'
 import ProviderCard from './ProviderCard'
 
@@ -15,104 +15,104 @@ export default function ProviderSettings({ onClose }: ProviderSettingsProps) {
     configuredProviders,
     availableModels,
     isLoading,
+    error,
     testProvider,
     saveCredentials,
     removeCredentials,
+    refreshProviders,
   } = useProviders()
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+  const subtitle =
+    configuredProviders.length > 0
+      ? `${configuredProviders.length} active provider${
+          configuredProviders.length !== 1 ? 's' : ''
+        } · ${availableModels.length} models available`
+      : 'Configure at least one LLM provider to get started'
 
-      {/* Modal */}
-      <div
-        className="relative w-full max-w-3xl max-h-[85vh] rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
-        style={{
-          backgroundColor: 'var(--mars-color-bg)',
-          borderColor: 'var(--mars-color-border)',
-        }}
+  const footer =
+    configuredProviders.length === 0 && !isLoading && !error ? (
+      <p
+        className="text-xs text-center w-full"
+        style={{ color: 'var(--mars-color-text-tertiary)' }}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
-          style={{ borderColor: 'var(--mars-color-border)' }}
-        >
-          <div>
-            <h2
-              className="text-base font-bold"
-              style={{ color: 'var(--mars-color-text)' }}
-            >
-              LLM Provider Settings
-            </h2>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: 'var(--mars-color-text-tertiary)' }}
-            >
-              {configuredProviders.length > 0
-                ? `${configuredProviders.length} active provider${configuredProviders.length !== 1 ? 's' : ''} · ${availableModels.length} models available`
-                : 'Configure at least one LLM provider to get started'}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg transition-colors hover:bg-[var(--mars-color-bg-hover)]"
+        Click <strong>Configure</strong> on any provider above to add your API
+        credentials. Existing <code>.env</code> credentials are detected
+        automatically.
+      </p>
+    ) : undefined
+
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+      title="LLM Provider Settings"
+      size="lg"
+      footer={footer}
+    >
+      <p
+        className="text-xs mb-4"
+        style={{ color: 'var(--mars-color-text-tertiary)' }}
+      >
+        {subtitle}
+      </p>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div
+            className="animate-spin rounded-full h-6 w-6 border-2 border-t-transparent"
+            style={{
+              borderColor: 'var(--mars-color-border)',
+              borderTopColor: 'transparent',
+            }}
+          />
+          <span
+            className="ml-3 text-sm"
             style={{ color: 'var(--mars-color-text-secondary)' }}
           >
-            <X className="w-4 h-4" />
+            Loading providers...
+          </span>
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="rounded-lg px-4 py-3 text-sm"
+          style={{
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            color: '#ef4444',
+          }}
+        >
+          <div className="font-medium mb-1">Failed to load providers</div>
+          <div className="text-xs opacity-80 break-all mb-3">{error}</div>
+          <button
+            onClick={refreshProviders}
+            className="px-3 py-1 rounded text-xs font-medium border transition-colors
+              hover:bg-red-500/10"
+            style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}
+          >
+            Retry
           </button>
         </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div
-                className="animate-spin rounded-full h-6 w-6 border-2 border-t-transparent"
-                style={{ borderColor: 'var(--mars-color-border)', borderTopColor: 'transparent' }}
-              />
-              <span
-                className="ml-3 text-sm"
-                style={{ color: 'var(--mars-color-text-secondary)' }}
-              >
-                Loading providers...
-              </span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {providers.map((provider) => (
-                <ProviderCard
-                  key={provider.provider_id}
-                  provider={provider}
-                  onTest={testProvider}
-                  onSave={saveCredentials}
-                  onRemove={removeCredentials}
-                />
-              ))}
-            </div>
-          )}
+      ) : providers.length === 0 ? (
+        <div
+          className="text-center py-12 text-sm"
+          style={{ color: 'var(--mars-color-text-tertiary)' }}
+        >
+          No providers registered.
         </div>
-
-        {/* Footer */}
-        {configuredProviders.length === 0 && !isLoading && (
-          <div
-            className="px-6 py-3 border-t text-center"
-            style={{ borderColor: 'var(--mars-color-border)' }}
-          >
-            <p
-              className="text-xs"
-              style={{ color: 'var(--mars-color-text-tertiary)' }}
-            >
-              Click <strong>Configure</strong> on any provider above to add your
-              API credentials. Existing <code>.env</code> credentials are
-              detected automatically.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.provider_id}
+              provider={provider}
+              onTest={testProvider}
+              onSave={saveCredentials}
+              onRemove={removeCredentials}
+            />
+          ))}
+        </div>
+      )}
+    </Modal>
   )
 }

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Search, FileText, Play, CheckCircle2, XCircle, Clock, ChevronRight, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { parseBackendDate } from '@/lib/dateUtils'
 
 export interface SessionItem {
   task_id: string
@@ -250,14 +251,17 @@ export default function SessionSidebar({
                       </span>
                     </div>
                     {/* Time */}
-                    {session.created_at && (
-                      <p
-                        className="text-[9px] mt-1"
-                        style={{ color: 'var(--mars-color-text-disabled)' }}
-                      >
-                        {formatDistanceToNow(new Date(session.created_at), { addSuffix: true })}
-                      </p>
-                    )}
+                    {(() => {
+                      const d = parseBackendDate(session.created_at)
+                      return d ? (
+                        <p
+                          className="text-[9px] mt-1"
+                          style={{ color: 'var(--mars-color-text-disabled)' }}
+                        >
+                          {formatDistanceToNow(d, { addSuffix: true })}
+                        </p>
+                      ) : null
+                    })()}
                   </div>
 
                   {/* Actions */}

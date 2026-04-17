@@ -49,13 +49,19 @@ export default function ProviderCard({
 }: ProviderCardProps) {
   const [editing, setEditing] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
   const isConfigured = provider.status !== 'not_configured'
 
   const handleRemove = async () => {
     setRemoving(true)
+    setRemoveError(null)
     try {
       await onRemove(provider.provider_id)
+      setConfirmingRemove(false)
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : String(err))
     } finally {
       setRemoving(false)
     }
@@ -65,10 +71,11 @@ export default function ProviderCard({
     return (
       <ProviderCredentialForm
         providerName={provider.display_name}
-        providerId={provider.provider_id}
         fields={provider.credential_fields}
         onTest={(creds) => onTest(provider.provider_id, creds)}
         onSave={async (creds) => {
+          // If onSave throws, ProviderCredentialForm catches it and shows
+          // an error banner. Only close the form on a clean success.
           const result = await onSave(provider.provider_id, creds)
           setEditing(false)
           return result
@@ -142,19 +149,50 @@ export default function ProviderCard({
             >
               Edit
             </button>
-            <button
-              onClick={handleRemove}
-              disabled={removing}
-              className="px-2.5 py-1 rounded text-[11px] font-medium border transition-colors
-                hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500
-                disabled:opacity-40"
-              style={{
-                borderColor: 'var(--mars-color-border)',
-                color: 'var(--mars-color-text-tertiary)',
-              }}
-            >
-              {removing ? 'Removing...' : 'Remove'}
-            </button>
+            {confirmingRemove ? (
+              <>
+                <button
+                  onClick={handleRemove}
+                  disabled={removing}
+                  className="px-2.5 py-1 rounded text-[11px] font-semibold transition-colors
+                    disabled:opacity-40"
+                  style={{
+                    backgroundColor: 'rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#ef4444',
+                  }}
+                >
+                  {removing ? 'Removing…' : 'Confirm Remove'}
+                </button>
+                <button
+                  onClick={() => {
+                    setConfirmingRemove(false)
+                    setRemoveError(null)
+                  }}
+                  disabled={removing}
+                  className="px-2.5 py-1 rounded text-[11px] font-medium border transition-colors
+                    hover:bg-[var(--mars-color-bg-hover)] disabled:opacity-40"
+                  style={{
+                    borderColor: 'var(--mars-color-border)',
+                    color: 'var(--mars-color-text-secondary)',
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setConfirmingRemove(true)}
+                className="px-2.5 py-1 rounded text-[11px] font-medium border transition-colors
+                  hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500"
+                style={{
+                  borderColor: 'var(--mars-color-border)',
+                  color: 'var(--mars-color-text-tertiary)',
+                }}
+              >
+                Remove
+              </button>
+            )}
           </>
         ) : (
           <button
@@ -169,6 +207,20 @@ export default function ProviderCard({
           </button>
         )}
       </div>
+
+      {removeError && (
+        <div
+          role="alert"
+          className="mt-2 rounded px-2 py-1.5 text-[10px]"
+          style={{
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            color: '#ef4444',
+            border: '1px solid rgba(239,68,68,0.2)',
+          }}
+        >
+          Remove failed: {removeError}
+        </div>
+      )}
     </div>
   )
 }

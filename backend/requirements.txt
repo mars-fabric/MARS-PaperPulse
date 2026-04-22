@@ -24,7 +24,7 @@ pypdf>=4.0.0
 cryptography>=42.0.0
 
 # CMB Agent (LLM provider registry + orchestration)
-mars_cmbagent>=1.1.2
+mars_cmbagent>=1.1.5
 
 # LangChain adapters for direct LLM calls inside PaperPulse agents
 # (cmbagent already pulls in langchain-openai / -anthropic / -google-genai

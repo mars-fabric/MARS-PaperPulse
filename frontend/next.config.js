@@ -9,10 +9,8 @@ const nextConfig = {
   // Disable the "X-Powered-By" header
   poweredByHeader: false,
 
-  // Allow external hosts in development (configured via env var)
-  ...(process.env.ALLOWED_DEV_ORIGINS
-    ? { allowedDevOrigins: process.env.ALLOWED_DEV_ORIGINS.split(',') }
-    : {}),
+  // Allow the AWS machine IP for dev HMR access
+  allowedDevOrigins: ['100.88.49.58'],
 
   // Explicitly set turbopack root to avoid conflicts with multiple lockfiles
   turbopack: {

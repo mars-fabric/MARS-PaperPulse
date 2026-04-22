@@ -26,6 +26,11 @@ cryptography>=42.0.0
 # CMB Agent (LLM provider registry + orchestration)
 mars_cmbagent>=1.1.2
 
+# LangChain adapters for direct LLM calls inside PaperPulse agents
+# (cmbagent already pulls in langchain-openai / -anthropic / -google-genai
+#  and litellm; langchain-aws is the Bedrock chat model for LangGraph nodes.)
+langchain-aws>=0.2.0
+
 # Test dependencies
 pytest>=8.0.0
 pytest-asyncio>=0.23.0

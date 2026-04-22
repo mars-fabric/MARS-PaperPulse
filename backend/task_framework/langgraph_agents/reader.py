@@ -1,11 +1,9 @@
 import os
 from langchain_core.runnables import RunnableConfig
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI, AzureChatOpenAI
-from langchain_anthropic import ChatAnthropic
 
 from .parameters import GraphState
 from ..config import INPUT_FILES, IDEA_FILE, METHOD_FILE, LITERATURE_FILE, REFEREE_FILE, PAPER_FOLDER
+from ..llm_factory import build_chat_model
 
 def preprocess_node(state: GraphState, config: RunnableConfig):
     """
@@ -16,42 +14,12 @@ def preprocess_node(state: GraphState, config: RunnableConfig):
     state['tokens'] = {'ti': 0, 'to': 0, 'i': 0, 'o': 0}
 
     #########################################
-    # set the LLM
-    if 'gemini' in state['llm']['model']:
-        state['llm']['llm'] = ChatGoogleGenerativeAI(model=state['llm']['model'],
-                                                temperature=state['llm']['temperature'],
-                                                google_api_key=state["keys"].GEMINI)
-
-    elif any(key in state['llm']['model'] for key in ['gpt', 'o3']):
-        _openai_key = state["keys"].OPENAI
-        _azure_key  = state["keys"].AZURE_OPENAI_API_KEY
-        _azure_ep   = state["keys"].AZURE_OPENAI_ENDPOINT
-        _azure_dep  = state["keys"].AZURE_OPENAI_DEPLOYMENT
-        _azure_ver  = state["keys"].AZURE_OPENAI_API_VERSION
-        if _openai_key:
-            state['llm']['llm'] = ChatOpenAI(
-                model=state['llm']['model'],
-                temperature=state['llm']['temperature'],
-                openai_api_key=_openai_key,
-            )
-        elif _azure_key and _azure_ep and _azure_dep:
-            state['llm']['llm'] = AzureChatOpenAI(
-                azure_deployment=_azure_dep,
-                azure_endpoint=_azure_ep,
-                api_key=_azure_key,
-                api_version=_azure_ver or "2024-12-01-preview",
-                temperature=state['llm']['temperature'],
-            )
-        else:
-            raise ValueError(
-                "No OpenAI credentials found. Set OPENAI_API_KEY or "
-                "AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT."
-            )
-                    
-    elif 'claude' in state['llm']['model']  or 'anthropic' in state['llm']['model'] :
-        state['llm']['llm'] = ChatAnthropic(model=state['llm']['model'],
-                                            temperature=state['llm']['temperature'],
-                                            anthropic_api_key=state["keys"].ANTHROPIC)
+    # set the LLM (provider-agnostic)
+    state['llm']['llm'] = build_chat_model(
+        model=state['llm']['model'],
+        temperature=state['llm']['temperature'],
+        keys=state["keys"],
+    )
     #########################################
 
     #########################################

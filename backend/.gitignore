@@ -1,0 +1,65 @@
+# ────────────────────────────────────────────────────────────────────────
+# Python
+# ────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.env.local
+.pytest_cache/
+
+# ────────────────────────────────────────────────────────────────────────
+# Build / dist
+# ────────────────────────────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ────────────────────────────────────────────────────────────────────────
+# IDE / OS
+# ────────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# ────────────────────────────────────────────────────────────────────────
+# Runtime artifacts — deep-research tasks write per-task work_dirs here.
+# Never commit these; they can balloon to GB with plots, pickles, chats.
+# ────────────────────────────────────────────────────────────────────────
+mars_cmbdir/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ────────────────────────────────────────────────────────────────────────
+# Agent-leaked artifacts — historically the deep-research agents wrote
+# .md / .py files into the backend root because of an unscoped
+# LangChain WriteFileTool. Fix 1 in registration.py prevents future
+# leakage; these patterns protect against regressions. Whitelist
+# anything we know is legitimate source (README / CHANGELOG / etc.).
+# ────────────────────────────────────────────────────────────────────────
+/*.md
+!/README.md
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/LICENSE.md
+attic/
+
+# Loose Python files in the backend root are almost always agent leakage.
+# Legitimate entry points (main.py, run.py) and dataset generators are
+# explicitly whitelisted below.
+/STEP_*.md
+/PHASE_*.py
+/FINAL_*.md
+/PROJECT_*.md
+/RESEARCH_*.md
+/step*.py

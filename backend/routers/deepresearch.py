@@ -53,6 +53,109 @@ STAGE_DEFS = [
     {"number": 4, "name": "paper_generation", "shared_key": None, "file": None},
 ]
 
+# Maps stage_num -> the short name stage_helpers.create_work_dir uses to
+# produce the per-stage sub-directory. The sub-directory pattern is
+# f"{short_name}_generation_output". Used by _clear_stage_scratch to
+# invalidate stale pickles / plans on re-run.
+_STAGE_SHORT_NAME = {1: "idea", 2: "method", 3: "experiment"}
+
+# Upper bounds for chat_history persisted in the ``TaskStage.output_data``
+# JSON column. Full chat history is still written to disk under
+# ``<work_dir>/<stage>/chats/*.json`` — these caps only apply to the DB
+# copy, which must be small enough for fast queries and page loads.
+_DB_CHAT_HISTORY_MAX_MESSAGES = 500
+_DB_CHAT_HISTORY_HEAD_MESSAGES = 50   # keep first N to preserve early context
+_DB_CHAT_HISTORY_MAX_CONTENT_CHARS = 20_000
+_DB_CHAT_HISTORY_TRUNC_MARKER = "… [truncated for DB persistence; full content in work_dir/chats/]"
+
+
+def _truncate_chat_history_for_db(chat_history: list) -> list:
+    """Return a chat_history list sized to fit comfortably in the DB JSON column.
+
+    Three bounds applied in order:
+      1. Each message's ``content`` is capped at ``_DB_CHAT_HISTORY_MAX_CONTENT_CHARS``.
+      2. If > ``_DB_CHAT_HISTORY_MAX_MESSAGES`` messages: keep first ``_DB_CHAT_HISTORY_HEAD_MESSAGES``
+         plus the last ``_MAX - _HEAD`` messages, with a synthetic gap marker.
+      3. Malformed non-dict entries are preserved as-is (avoid surprises).
+
+    The original ``chat_history`` list is not mutated.
+    """
+    if not isinstance(chat_history, list) or not chat_history:
+        return chat_history or []
+
+    def _cap_one(msg):
+        if not isinstance(msg, dict):
+            return msg
+        content = msg.get("content")
+        if isinstance(content, str) and len(content) > _DB_CHAT_HISTORY_MAX_CONTENT_CHARS:
+            head_len = _DB_CHAT_HISTORY_MAX_CONTENT_CHARS - len(_DB_CHAT_HISTORY_TRUNC_MARKER)
+            capped = {**msg, "content": content[:max(0, head_len)] + _DB_CHAT_HISTORY_TRUNC_MARKER}
+            return capped
+        return msg
+
+    capped = [_cap_one(m) for m in chat_history]
+
+    if len(capped) <= _DB_CHAT_HISTORY_MAX_MESSAGES:
+        return capped
+
+    head = capped[:_DB_CHAT_HISTORY_HEAD_MESSAGES]
+    tail_n = _DB_CHAT_HISTORY_MAX_MESSAGES - _DB_CHAT_HISTORY_HEAD_MESSAGES
+    tail = capped[-tail_n:] if tail_n > 0 else []
+    dropped = len(capped) - len(head) - len(tail)
+    gap_marker = {
+        "role": "system",
+        "name": "_truncation_marker",
+        "content": (
+            f"[{dropped} intermediate messages truncated for DB persistence; "
+            f"full history available in work_dir/<stage>/chats/]"
+        ),
+    }
+    return head + [gap_marker] + tail
+
+
+def _clear_stage_scratch(work_dir: str, stage_num: int) -> None:
+    """Wipe stale planning / context artifacts for a stage about to re-run.
+
+    When a user re-executes an already-completed stage (e.g. after editing
+    upstream data or plan), old ``context/context_step_*.pkl`` and the
+    ``planning/final_plan.json`` from the prior run are still on disk.
+    If anything downstream loads from them (restart flows, plan-load
+    fallbacks), the new run would silently inherit the old plan/context.
+
+    Preserves ``chats/`` and ``cost/`` — they are historical records that
+    operators sometimes diff across runs to understand behavior.
+
+    Best-effort: per-file try/except so a permission error on one file
+    doesn't block the re-run. Only stages 1-3 have a scratch layout;
+    stage 4 (paper) uses a different layout and is left untouched.
+    """
+    if stage_num not in _STAGE_SHORT_NAME:
+        return
+    stage_dir = os.path.join(work_dir, f"{_STAGE_SHORT_NAME[stage_num]}_generation_output")
+    if not os.path.isdir(stage_dir):
+        return
+
+    targets_to_wipe = (
+        os.path.join(stage_dir, "context"),
+        os.path.join(stage_dir, "planning", "final_plan.json"),
+        os.path.join(stage_dir, "final_plan.json"),  # older layout
+    )
+    wiped: List[str] = []
+    for target in targets_to_wipe:
+        try:
+            if os.path.isdir(target):
+                import shutil as _shutil
+                _shutil.rmtree(target, ignore_errors=True)
+                wiped.append(target)
+            elif os.path.isfile(target):
+                os.remove(target)
+                wiped.append(target)
+        except OSError as exc:
+            logger.warning("stage_scratch_wipe_failed path=%s error=%s", target, exc)
+
+    if wiped:
+        logger.info("stage_scratch_wiped stage=%d count=%d paths=%s", stage_num, len(wiped), wiped)
+
 
 # Track running background tasks
 _running_tasks: Dict[str, asyncio.Task] = {}
@@ -524,6 +627,12 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
             repo.update_stage_status(stage.id, "pending")
             stage = next((s for s in repo.list_stages(parent_run_id=task_id) if s.stage_number == stage_num), stage)
 
+            # Wipe stale planning / context pickles so the rerun truly
+            # regenerates instead of inheriting pre-edit state. This uses
+            # parent_run.meta["work_dir"] which we haven't fetched yet in
+            # this branch — defer the actual wipe to just before _run_phase
+            # spawns (see _clear_stage_scratch call below).
+
         # Validate prerequisites: all previous stages must be completed
         # Also recover stale "running" prerequisite stages
         stages = repo.list_stages(parent_run_id=task_id)  # Refresh after possible status update above
@@ -591,6 +700,13 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
         config_overrides = (request.config_overrides if request else None) or {}
     finally:
         db.close()
+
+    # Invalidate stale per-stage pickles / planning json BEFORE the
+    # background task starts, so any restart/resume logic inside the
+    # phase cannot accidentally pick up pre-edit state from a prior run.
+    # Safe to call every time: the helper is a no-op when the stage
+    # sub-directory doesn't exist yet.
+    _clear_stage_scratch(work_dir, stage_num)
 
     # Launch background execution
     task = asyncio.create_task(
@@ -861,18 +977,27 @@ async def _run_planning_control_stage(
     )
 
     # ── 5. Extract results + save files ──
+    # Truncate chat_history BEFORE passing it to the build_*_output
+    # helpers. Full, un-truncated history is still persisted as JSON
+    # files under ``<work_dir>/<stage>/chats/`` by cmbagent itself — we
+    # only shrink the copy that goes into the DB ``output_data`` JSON
+    # column, which grows unbounded on retry-heavy runs.
+    chat_history_for_db = _truncate_chat_history_for_db(results["chat_history"])
+
     if stage_num == 1:
+        # extract_idea_result walks the FULL chat_history (needed for the
+        # broad fallback), not the DB-truncated one.
         research_idea = stage_helpers.extract_idea_result(results)
         idea_path = stage_helpers.save_idea(research_idea, work_dir)
         output_data = stage_helpers.build_idea_output(
-            research_idea, data_description, idea_path, results["chat_history"],
+            research_idea, data_description, idea_path, chat_history_for_db,
         )
     elif stage_num == 2:
         methodology = stage_helpers.extract_method_result(results)
         methods_path = stage_helpers.save_method(methodology, work_dir)
         output_data = stage_helpers.build_method_output(
             shared_state.get("research_idea", ""), data_description,
-            methodology, methods_path, results["chat_history"],
+            methodology, methods_path, chat_history_for_db,
         )
     elif stage_num == 3:
         experiment_results, plot_paths = stage_helpers.extract_experiment_result(results)
@@ -882,7 +1007,7 @@ async def _run_planning_control_stage(
         output_data = stage_helpers.build_experiment_output(
             shared_state.get("research_idea", ""), data_description,
             shared_state.get("methodology", ""), experiment_results,
-            final_plot_paths, results_path, plots_dir, results["chat_history"],
+            final_plot_paths, results_path, plots_dir, chat_history_for_db,
         )
 
     # ── 6. Safety net: scan work_dir for cost files written to disk ──

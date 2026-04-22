@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 
 from task_framework.config import (
     INPUT_FILES, IDEA_FILE, METHOD_FILE, RESULTS_FILE, PLOTS_FOLDER,

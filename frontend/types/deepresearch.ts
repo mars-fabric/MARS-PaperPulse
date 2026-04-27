@@ -25,6 +25,40 @@ export interface DeepresearchTaskState {
   total_cost_usd?: number | null
 }
 
+export type ArtifactCategory =
+  | 'results'
+  | 'plots'
+  | 'code'
+  | 'data'
+  | 'reports'
+  | 'chats'
+  | 'planning'
+
+export interface ArtifactItem {
+  name: string
+  /** Absolute path on the backend, used with /api/files/serve and /download */
+  path: string
+  /** Path relative to the experiment_generation_output/ subdir */
+  rel_path: string
+  size: number
+  mime: string
+  /** Plan-step index when present in the filename (e.g. chat_history_step_3.json) */
+  step: number | null
+  modified: number
+}
+
+export type ArtifactManifest = Partial<Record<ArtifactCategory, ArtifactItem[]>>
+
+export interface DeepresearchArtifactsResponse {
+  stage_number: number
+  stage_name: string
+  status: string
+  work_dir?: string | null
+  artifact_manifest: ArtifactManifest
+  total_files: number
+  total_bytes: number
+}
+
 export interface DeepresearchStageContent {
   stage_number: number
   stage_name: string
@@ -32,7 +66,23 @@ export interface DeepresearchStageContent {
   content?: string | null
   shared_state?: Record<string, unknown> | null
   output_files?: string[] | null
+  artifact_manifest?: ArtifactManifest | null
 }
+
+export const ARTIFACT_CATEGORY_LABELS: Record<ArtifactCategory, string> = {
+  results:  'Results',
+  plots:    'Plots',
+  code:     'Code',
+  data:     'Data',
+  reports:  'Reports',
+  chats:    'Chats',
+  planning: 'Plan',
+}
+
+/** Display order for the tab bar — most user-facing first. */
+export const ARTIFACT_CATEGORY_ORDER: ArtifactCategory[] = [
+  'plots', 'results', 'code', 'data', 'reports', 'chats', 'planning',
+]
 
 export interface DeepresearchCreateResponse {
   task_id: string

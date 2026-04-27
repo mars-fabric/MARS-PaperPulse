@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Play, Timer, DollarSign, Settings2 } from 'lucid
 import { Button } from '@/components/core'
 import ExecutionProgress from './ExecutionProgress'
 import StageAdvancedSettings from './StageAdvancedSettings'
+import ArtifactBrowser from './ArtifactBrowser'
 import type { useDeepresearchTask } from '@/hooks/useDeepresearchTask'
 import type { DeepresearchStageConfig } from '@/types/deepresearch'
 
@@ -24,16 +25,23 @@ export default function ExecutionPanel({
   onBack,
 }: ExecutionPanelProps) {
   const {
+    taskId,
     taskState,
     consoleOutput,
     isExecuting,
     executeStage,
+    fetchStageContent,
+    fetchStageArtifacts,
+    artifacts,
+    artifactsTotalFiles,
+    artifactsTotalBytes,
     taskConfig,
     setTaskConfig,
   } = hook
 
   const [elapsed, setElapsed] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
+  const [contentLoaded, setContentLoaded] = useState(false)
 
   const updateCfg = useCallback((patch: Partial<DeepresearchStageConfig>) => {
     setTaskConfig({ ...taskConfig, ...patch })
@@ -45,6 +53,28 @@ export default function ExecutionPanel({
   const isNotStarted = stage?.status === 'pending'
 
   // (stage is started manually via the Run button in the pre-execution UI)
+
+  // Load stage content (and the artifact manifest) once the experiment
+  // completes so the artifact browser has data to render.
+  useEffect(() => {
+    if (stageNum === 3 && isCompleted && !contentLoaded) {
+      fetchStageContent(stageNum).then(() => setContentLoaded(true))
+    }
+  }, [stageNum, isCompleted, contentLoaded, fetchStageContent])
+
+  // Auto-fire next stage on continue, mirroring ReviewPanel's behaviour so
+  // the user lands on stage 4 already running rather than on the idle
+  // "Generate Paper" button.
+  const handleNext = useCallback(() => {
+    const nextStageNum = stageNum + 1
+    if (nextStageNum <= 4) {
+      const nextStage = taskState?.stages.find(s => s.stage_number === nextStageNum)
+      if (nextStage?.status === 'pending') {
+        executeStage(nextStageNum)
+      }
+    }
+    onNext()
+  }, [stageNum, taskState, executeStage, onNext])
 
   // Timer — reset to 0 when execution starts, then tick every second
   useEffect(() => {
@@ -137,12 +167,27 @@ export default function ExecutionPanel({
         )}
       </div>
 
-      {/* Execution output */}
+      {/* Execution output — collapse to a compact summary once we have
+          completed and the artifact browser is taking the spotlight */}
       <ExecutionProgress
         consoleOutput={consoleOutput}
         isExecuting={isExecuting}
         stageName={stageName}
       />
+
+      {/* Artifact browser — every file Stage 3 produced. Mounted only after
+          the experiment has completed so the user can review outputs before
+          firing Stage 4. */}
+      {stageNum === 3 && isCompleted && taskId && (
+        <ArtifactBrowser
+          taskId={taskId}
+          stageNum={3}
+          manifest={artifacts}
+          totalFiles={artifactsTotalFiles}
+          totalBytes={artifactsTotalBytes}
+          onRefresh={() => fetchStageArtifacts(3, true)}
+        />
+      )}
 
       {/* Error display */}
       {isFailed && stage?.error && (
@@ -201,12 +246,13 @@ export default function ExecutionPanel({
           Back
         </Button>
         <Button
-          onClick={onNext}
+          onClick={handleNext}
           variant="primary"
           size="sm"
           disabled={!isCompleted}
         >
-          Next: Deep Scientific Research
+          <Play className="w-3.5 h-3.5 mr-1.5" />
+          Generate Paper
           <ArrowRight className="w-4 h-4 ml-1" />
         </Button>
       </div>

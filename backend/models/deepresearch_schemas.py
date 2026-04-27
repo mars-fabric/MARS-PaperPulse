@@ -68,6 +68,28 @@ class DeepresearchCreateResponse(BaseModel):
     stages: List[DeepresearchStageResponse]
 
 
+class ArtifactItem(BaseModel):
+    """One file in the Stage 3 artifact manifest."""
+    name: str
+    path: str
+    rel_path: str
+    size: int
+    mime: str
+    step: Optional[int] = None
+    modified: float
+
+
+class ArtifactManifest(BaseModel):
+    """Categorized artifact listing for a stage (Stage 3 today)."""
+    results:  List[ArtifactItem] = Field(default_factory=list)
+    plots:    List[ArtifactItem] = Field(default_factory=list)
+    code:     List[ArtifactItem] = Field(default_factory=list)
+    data:     List[ArtifactItem] = Field(default_factory=list)
+    reports:  List[ArtifactItem] = Field(default_factory=list)
+    chats:    List[ArtifactItem] = Field(default_factory=list)
+    planning: List[ArtifactItem] = Field(default_factory=list)
+
+
 class DeepresearchStageContentResponse(BaseModel):
     """Response for GET /api/deepresearch/{task_id}/stages/{num}/content"""
     stage_number: int
@@ -76,6 +98,18 @@ class DeepresearchStageContentResponse(BaseModel):
     content: Optional[str] = None
     shared_state: Optional[Dict[str, Any]] = None
     output_files: Optional[List[str]] = None
+    artifact_manifest: Optional[ArtifactManifest] = None
+
+
+class DeepresearchArtifactsResponse(BaseModel):
+    """Response for GET /api/deepresearch/{task_id}/stages/{num}/artifacts"""
+    stage_number: int
+    stage_name: str
+    status: str
+    work_dir: Optional[str] = None
+    artifact_manifest: ArtifactManifest
+    total_files: int
+    total_bytes: int
 
 
 class DeepresearchRefineResponse(BaseModel):

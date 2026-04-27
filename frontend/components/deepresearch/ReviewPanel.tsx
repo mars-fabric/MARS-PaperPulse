@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/core'
 import RefinementChat from './RefinementChat'

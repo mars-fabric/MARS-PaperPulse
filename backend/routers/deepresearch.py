@@ -24,6 +24,8 @@ from models.deepresearch_schemas import (
     DeepresearchExecuteRequest,
     DeepresearchStageResponse,
     DeepresearchStageContentResponse,
+    DeepresearchArtifactsResponse,
+    ArtifactManifest,
     DeepresearchContentUpdateRequest,
     DeepresearchRefineRequest,
     DeepresearchRefineResponse,
@@ -1008,6 +1010,7 @@ async def _run_planning_control_stage(
             shared_state.get("research_idea", ""), data_description,
             shared_state.get("methodology", ""), experiment_results,
             final_plot_paths, results_path, plots_dir, chat_history_for_db,
+            work_dir=work_dir,
         )
 
     # ── 6. Safety net: scan work_dir for cost files written to disk ──
@@ -1217,6 +1220,31 @@ async def get_stage_content(task_id: str, stage_num: int):
                     if fname.endswith(('.tex', '.pdf')):
                         sanitized_files.append(os.path.join(f, fname))
 
+        # Stage 3 artifact manifest. New runs persist this in output_data;
+        # for older completed runs we lazily backfill by walking work_dir.
+        manifest_data = None
+        if stage_num == 3 and stage.status == "completed":
+            manifest_data = (stage.output_data or {}).get("artifact_manifest")
+            if not manifest_data:
+                from cmbagent.database.models import WorkflowRun
+                from task_framework import stage_helpers
+                parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+                wd = (parent.meta or {}).get("work_dir", _get_work_dir(task_id)) if parent else _get_work_dir(task_id)
+                if wd and os.path.isdir(os.path.join(wd, stage_helpers.EXPERIMENT_SUBDIR)):
+                    try:
+                        manifest_data = stage_helpers.collect_experiment_artifacts(wd)
+                        stage_helpers.write_artifact_manifest(wd, manifest_data)
+                        # Persist back so future reads are O(1)
+                        new_output = dict(stage.output_data or {})
+                        new_output["artifact_manifest"] = manifest_data
+                        repo.update_stage_status(stage.id, stage.status, output_data=new_output)
+                        db.commit()
+                        logger.info("artifact_manifest_backfilled task=%s files=%d",
+                                    task_id, sum(len(v) for v in manifest_data.values()))
+                    except Exception as exc:
+                        logger.warning("artifact_manifest_backfill_failed task=%s error=%s", task_id, exc)
+                        manifest_data = None
+
         return DeepresearchStageContentResponse(
             stage_number=stage.stage_number,
             stage_name=stage.stage_name,
@@ -1224,6 +1252,144 @@ async def get_stage_content(task_id: str, stage_num: int):
             content=content,
             shared_state=shared,
             output_files=sanitized_files,
+            artifact_manifest=ArtifactManifest(**manifest_data) if manifest_data else None,
+        )
+    finally:
+        db.close()
+
+
+# =============================================================================
+# GET /api/deepresearch/{task_id}/stages/{num}/artifacts
+# GET /api/deepresearch/{task_id}/stages/{num}/artifacts/zip
+# =============================================================================
+
+@router.get("/{task_id}/stages/{stage_num}/artifacts", response_model=DeepresearchArtifactsResponse)
+async def list_stage_artifacts(task_id: str, stage_num: int, refresh: bool = False):
+    """Return the categorized artifact manifest for a stage.
+
+    By default reads the manifest stored in ``output_data`` (fast). If
+    ``refresh=true``, re-walks the work directory — useful when files
+    were added/removed by user edits or ad-hoc tool runs after the
+    stage initially completed.
+
+    Currently only Stage 3 (experiment) emits a manifest; other stages
+    return an empty manifest with totals=0.
+    """
+    from task_framework import stage_helpers
+
+    db = _get_db()
+    try:
+        session_id = _get_session_id_for_task(task_id, db)
+        repo = _get_stage_repo(db, session_id=session_id)
+        stages = repo.list_stages(parent_run_id=task_id)
+        stage = next((s for s in stages if s.stage_number == stage_num), None)
+        if not stage:
+            raise HTTPException(status_code=404, detail=f"Stage {stage_num} not found")
+
+        from cmbagent.database.models import WorkflowRun
+        parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+        work_dir = (parent.meta or {}).get("work_dir", _get_work_dir(task_id)) if parent else _get_work_dir(task_id)
+
+        manifest_data = None
+        if stage_num == 3:
+            if not refresh:
+                manifest_data = (stage.output_data or {}).get("artifact_manifest")
+            if refresh or not manifest_data:
+                if work_dir and os.path.isdir(os.path.join(work_dir, stage_helpers.EXPERIMENT_SUBDIR)):
+                    manifest_data = stage_helpers.collect_experiment_artifacts(work_dir)
+                    stage_helpers.write_artifact_manifest(work_dir, manifest_data)
+                    new_output = dict(stage.output_data or {})
+                    new_output["artifact_manifest"] = manifest_data
+                    repo.update_stage_status(stage.id, stage.status, output_data=new_output)
+                    db.commit()
+
+        manifest_obj = ArtifactManifest(**manifest_data) if manifest_data else ArtifactManifest()
+        all_files = (
+            manifest_obj.results + manifest_obj.plots + manifest_obj.code +
+            manifest_obj.data + manifest_obj.reports + manifest_obj.chats +
+            manifest_obj.planning
+        )
+
+        return DeepresearchArtifactsResponse(
+            stage_number=stage.stage_number,
+            stage_name=stage.stage_name,
+            status=stage.status,
+            work_dir=work_dir,
+            artifact_manifest=manifest_obj,
+            total_files=len(all_files),
+            total_bytes=sum(a.size for a in all_files),
+        )
+    finally:
+        db.close()
+
+
+@router.get("/{task_id}/stages/{stage_num}/artifacts/zip")
+async def download_stage_artifacts_zip(task_id: str, stage_num: int, categories: Optional[str] = None):
+    """Stream a zip archive of the stage's artifacts.
+
+    ``categories`` is an optional comma-separated subset, e.g.
+    ``categories=plots,data``. When omitted, includes everything.
+    Files are stored uncompressed (ZIP_STORED) — most artifacts are
+    already binary/compressed and CPU-bound recompression doesn't pay.
+    """
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+    from task_framework import stage_helpers
+
+    db = _get_db()
+    try:
+        session_id = _get_session_id_for_task(task_id, db)
+        repo = _get_stage_repo(db, session_id=session_id)
+        stages = repo.list_stages(parent_run_id=task_id)
+        stage = next((s for s in stages if s.stage_number == stage_num), None)
+        if not stage:
+            raise HTTPException(status_code=404, detail=f"Stage {stage_num} not found")
+
+        manifest_data = (stage.output_data or {}).get("artifact_manifest")
+        if not manifest_data:
+            from cmbagent.database.models import WorkflowRun
+            parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+            wd = (parent.meta or {}).get("work_dir", _get_work_dir(task_id)) if parent else _get_work_dir(task_id)
+            if wd and os.path.isdir(os.path.join(wd, stage_helpers.EXPERIMENT_SUBDIR)):
+                manifest_data = stage_helpers.collect_experiment_artifacts(wd)
+
+        if not manifest_data:
+            raise HTTPException(status_code=404, detail="No artifacts available for this stage")
+
+        wanted = None
+        if categories:
+            wanted = {c.strip() for c in categories.split(",") if c.strip()}
+
+        # Build the zip in memory — typical run is < 100 MB; for very large
+        # runs the user can fetch individual files via /api/files/download.
+        buf = io.BytesIO()
+        added = 0
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+            for category, items in manifest_data.items():
+                if wanted is not None and category not in wanted:
+                    continue
+                for item in items:
+                    src = item.get("path")
+                    if not src or not os.path.isfile(src):
+                        continue
+                    arc = os.path.join(category, item.get("rel_path") or item.get("name", ""))
+                    try:
+                        zf.write(src, arcname=arc)
+                        added += 1
+                    except OSError as exc:
+                        logger.warning("artifact_zip_skip path=%s error=%s", src, exc)
+
+        if added == 0:
+            raise HTTPException(status_code=404, detail="No matching files to download")
+
+        buf.seek(0)
+        filename = f"deepresearch-{task_id}-stage{stage_num}-artifacts.zip"
+        safe_filename = filename.replace('"', '\\"')
+        return StreamingResponse(
+            buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )
     finally:
         db.close()

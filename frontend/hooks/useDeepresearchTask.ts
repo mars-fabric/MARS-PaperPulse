@@ -8,6 +8,8 @@ import type {
   DeepresearchStageContent,
   DeepresearchCreateResponse,
   DeepresearchRefineResponse,
+  DeepresearchArtifactsResponse,
+  ArtifactManifest,
   RefinementMessage,
   UploadedFile,
   DeepresearchWizardStep,
@@ -40,11 +42,17 @@ interface UseDeepresearchTaskReturn {
   taskConfig: DeepresearchStageConfig
   setTaskConfig: (config: DeepresearchStageConfig) => void
 
+  // Stage artifacts (Stage 3 surfaces a categorized manifest)
+  artifacts: ArtifactManifest | null
+  artifactsTotalFiles: number
+  artifactsTotalBytes: number
+
   // Actions
   autoCreateTask: () => Promise<string | null>
   createTask: (task: string, dataDescription?: string, config?: DeepresearchStageConfig) => Promise<string | null>
   executeStage: (stageNum: number, overrideId?: string) => Promise<void>
   fetchStageContent: (stageNum: number) => Promise<DeepresearchStageContent | null>
+  fetchStageArtifacts: (stageNum: number, refresh?: boolean) => Promise<DeepresearchArtifactsResponse | null>
   saveStageContent: (stageNum: number, content: string, field: string) => Promise<void>
   refineContent: (stageNum: number, message: string, content: string) => Promise<string | null>
   uploadFile: (file: File) => Promise<void>
@@ -78,6 +86,11 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
   const [fileContextOutput, setFileContextOutput] = useState<string[]>([])
   const [fileContextStatus, setFileContextStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [fileContext, setFileContext] = useState('')
+
+  // Stage 3 artifact manifest (lazy — populated on fetchStageContent for stage 3)
+  const [artifacts, setArtifacts] = useState<ArtifactManifest | null>(null)
+  const [artifactsTotalFiles, setArtifactsTotalFiles] = useState(0)
+  const [artifactsTotalBytes, setArtifactsTotalBytes] = useState(0)
 
   const wsRef = useRef<WebSocket | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -291,6 +304,17 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
 
   // ---- Content ----
 
+  const _totalsForManifest = useCallback((m: ArtifactManifest | null | undefined) => {
+    if (!m) return { files: 0, bytes: 0 }
+    let files = 0, bytes = 0
+    for (const items of Object.values(m)) {
+      if (!items) continue
+      files += items.length
+      for (const it of items) bytes += it.size || 0
+    }
+    return { files, bytes }
+  }, [])
+
   const fetchStageContent = useCallback(async (stageNum: number): Promise<DeepresearchStageContent | null> => {
     if (!taskId) return null
     try {
@@ -298,8 +322,39 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       // Always update editable content — use content from response,
       // or empty string as fallback (content may be null/undefined/empty)
       setEditableContent(content.content ?? '')
+      // Populate artifact manifest for stage 3; clear it for other stages
+      // so a previous stage's manifest doesn't leak into the current view.
+      if (stageNum === 3) {
+        const m = content.artifact_manifest ?? null
+        setArtifacts(m)
+        const { files, bytes } = _totalsForManifest(m)
+        setArtifactsTotalFiles(files)
+        setArtifactsTotalBytes(bytes)
+      } else {
+        setArtifacts(null)
+        setArtifactsTotalFiles(0)
+        setArtifactsTotalBytes(0)
+      }
       return content
     } catch {
+      return null
+    }
+  }, [taskId, apiFetch, _totalsForManifest])
+
+  const fetchStageArtifacts = useCallback(async (
+    stageNum: number,
+    refresh = false,
+  ): Promise<DeepresearchArtifactsResponse | null> => {
+    if (!taskId) return null
+    try {
+      const url = `/api/deepresearch/${taskId}/stages/${stageNum}/artifacts${refresh ? '?refresh=true' : ''}`
+      const resp: DeepresearchArtifactsResponse = await apiFetch(url)
+      setArtifacts(resp.artifact_manifest)
+      setArtifactsTotalFiles(resp.total_files)
+      setArtifactsTotalBytes(resp.total_bytes)
+      return resp
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load artifacts')
       return null
     }
   }, [taskId, apiFetch])
@@ -523,6 +578,9 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     setFileContextOutput([])
     setFileContextStatus('idle')
     setFileContext('')
+    setArtifacts(null)
+    setArtifactsTotalFiles(0)
+    setArtifactsTotalBytes(0)
 
     // Set ref synchronously so any concurrent autoCreateTask calls see this ID
     // and bail out immediately instead of creating a new empty task
@@ -617,6 +675,9 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       setFileContextOutput([])
       setFileContextStatus('idle')
       setFileContext('')
+      setArtifacts(null)
+      setArtifactsTotalFiles(0)
+      setArtifactsTotalBytes(0)
       taskIdRef.current = null
       wsRef.current?.close()
       if (pollRef.current) clearInterval(pollRef.current)
@@ -646,10 +707,14 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     fileContext,
     taskConfig,
     setTaskConfig,
+    artifacts,
+    artifactsTotalFiles,
+    artifactsTotalBytes,
     autoCreateTask,
     createTask,
     executeStage,
     fetchStageContent,
+    fetchStageArtifacts,
     saveStageContent,
     refineContent,
     uploadFile,

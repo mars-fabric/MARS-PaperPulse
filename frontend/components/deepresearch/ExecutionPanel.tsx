@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useEffect, useCallback, useState } from 'react'
-import { ArrowLeft, ArrowRight, Play, Timer, DollarSign, Settings2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Play, Timer, DollarSign, Settings2, ListChecks, Loader2 } from 'lucide-react'
 import { Button } from '@/components/core'
 import ExecutionProgress from './ExecutionProgress'
 import StageAdvancedSettings from './StageAdvancedSettings'
 import ArtifactBrowser from './ArtifactBrowser'
+import MarkdownRenderer from '@/components/files/MarkdownRenderer'
 import type { useDeepresearchTask } from '@/hooks/useDeepresearchTask'
 import type { DeepresearchStageConfig } from '@/types/deepresearch'
 
@@ -37,11 +38,16 @@ export default function ExecutionPanel({
     artifactsTotalBytes,
     taskConfig,
     setTaskConfig,
+    previewExperimentPlan,
   } = hook
 
   const [elapsed, setElapsed] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [contentLoaded, setContentLoaded] = useState(false)
+  const [planLoading, setPlanLoading] = useState(false)
+  const [planMarkdown, setPlanMarkdown] = useState<string | null>(null)
+  const [planSources, setPlanSources] = useState<string[]>([])
+  const [planError, setPlanError] = useState<string | null>(null)
 
   const updateCfg = useCallback((patch: Partial<DeepresearchStageConfig>) => {
     setTaskConfig({ ...taskConfig, ...patch })
@@ -92,33 +98,152 @@ export default function ExecutionPanel({
     return `${m}:${s.toString().padStart(2, '0')}`
   }
 
-  // Pre-execution: stage not started — compact header with gear icon
+  // Plan preview is only meaningful for the experiment stage (Stage 3).
+  const supportsPlanPreview = stageNum === 3
+  const handlePreviewPlan = useCallback(async () => {
+    setPlanLoading(true)
+    setPlanError(null)
+    const resp = await previewExperimentPlan()
+    setPlanLoading(false)
+    if (resp) {
+      setPlanMarkdown(resp.plan_markdown)
+      setPlanSources(resp.based_on)
+    } else {
+      setPlanError('Could not generate plan. See console for details.')
+    }
+  }, [previewExperimentPlan])
+
+  // Pre-execution: stage not started — modern hero card
   if (isNotStarted && !isExecuting) {
     return (
-      <div className="max-w-3xl mx-auto space-y-3">
-        {/* Header bar */}
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm font-semibold" style={{ color: 'var(--mars-color-text)' }}>
-            {stageName}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(s => !s)}
-              title="Advanced settings"
-              className="p-1.5 rounded-mars-sm transition-colors"
-              style={{
-                color: showSettings ? 'var(--mars-color-accent)' : 'var(--mars-color-text-secondary)',
-                backgroundColor: showSettings ? 'var(--mars-color-accent-subtle, rgba(99,102,241,0.1))' : 'transparent',
-              }}
-            >
-              <Settings2 className="w-4 h-4" />
-            </button>
-            <Button onClick={() => executeStage(stageNum)} variant="primary" size="sm">
-              <Play className="w-3.5 h-3.5 mr-1.5" />
-              Run {stageName}
-            </Button>
+      <div className="max-w-3xl mx-auto space-y-4 mars-anim-fade-in">
+        {/* Hero card */}
+        <div
+          className="relative rounded-2xl border p-6 overflow-hidden"
+          style={{
+            background: 'linear-gradient(180deg, var(--mars-color-surface-raised), var(--mars-color-surface))',
+            borderColor: 'var(--mars-color-border)',
+            boxShadow: '0 4px 16px -8px rgba(0,0,0,0.20)',
+          }}
+        >
+          {/* Soft accent glow in corner */}
+          <div
+            aria-hidden
+            className="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-30 blur-3xl pointer-events-none"
+            style={{ background: 'radial-gradient(circle, #8b5cf6, transparent 70%)' }}
+          />
+          <div className="relative flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center mars-glow"
+                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
+                >
+                  <Play className="w-4 h-4 text-white" fill="white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--mars-color-text)' }}>
+                    {stageName}
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                    Ready to run · streams output live
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm mt-3" style={{ color: 'var(--mars-color-text-secondary)' }}>
+                The agent will read your idea & methodology and execute the experiment.
+                {supportsPlanPreview && (
+                  <span> Use <span className="font-semibold" style={{ color: 'var(--mars-color-text)' }}>Preview plan</span> first to see what's about to run, no cost.</span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {supportsPlanPreview && (
+                <button
+                  onClick={handlePreviewPlan}
+                  disabled={planLoading}
+                  title="Generate a quick plan summary before committing to the full experiment run"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all duration-150 hover:scale-[1.02] disabled:opacity-50"
+                  style={{
+                    backgroundColor: 'var(--mars-color-surface-overlay)',
+                    color: 'var(--mars-color-text-secondary)',
+                    border: '1px solid var(--mars-color-border)',
+                  }}
+                >
+                  {planLoading
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Planning…</>
+                    : <><ListChecks className="w-3.5 h-3.5" />Preview plan</>}
+                </button>
+              )}
+              <button
+                onClick={() => setShowSettings(s => !s)}
+                title="Advanced settings"
+                className="p-2 rounded-lg transition-all duration-150 hover:scale-105"
+                style={{
+                  color: showSettings ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                  backgroundColor: showSettings ? 'var(--mars-color-primary-subtle)' : 'var(--mars-color-surface-overlay)',
+                  border: '1px solid var(--mars-color-border)',
+                }}
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => executeStage(stageNum)}
+                className="mars-shimmer-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  boxShadow: '0 6px 22px rgba(99, 102, 241, 0.40), inset 0 1px 0 rgba(255,255,255,0.18)',
+                }}
+              >
+                <Play className="w-3.5 h-3.5" fill="currentColor" />
+                Run {stageName}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Plan preview (Stage 3 only) */}
+        {supportsPlanPreview && (planMarkdown || planError) && (
+          <div
+            className="p-4 rounded-mars-md border"
+            style={{
+              backgroundColor: 'var(--mars-color-surface)',
+              borderColor: 'var(--mars-color-border)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--mars-color-text)' }}>
+                <ListChecks className="w-3.5 h-3.5" />
+                Planned experiment steps
+              </span>
+              <button
+                onClick={handlePreviewPlan}
+                disabled={planLoading}
+                className="text-xs font-medium"
+                style={{ color: 'var(--mars-color-text-secondary)' }}
+                title="Re-generate the plan preview"
+              >
+                {planLoading ? 'Re-planning…' : 'Re-plan'}
+              </button>
+            </div>
+            {planError && (
+              <p className="text-xs" style={{ color: 'var(--mars-color-danger)' }}>{planError}</p>
+            )}
+            {planSources.length > 0 && (
+              <p className="text-[11px] mb-2" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                Based on: {planSources.join(', ')}
+              </p>
+            )}
+            {planMarkdown && (
+              <div className="text-xs">
+                <MarkdownRenderer content={planMarkdown} />
+              </div>
+            )}
+            <p className="text-[11px] mt-2" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+              This is a cheap preview — no experiment is run. Click <span className="font-medium">Run {stageName}</span> when you're satisfied.
+            </p>
+          </div>
+        )}
 
         {/* Inline settings (hidden by default) */}
         {showSettings && (
@@ -144,28 +269,38 @@ export default function ExecutionPanel({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-4 mars-anim-fade-in">
       {/* Stats bar */}
-      <div className="flex items-center gap-6">
-        {(isExecuting || elapsed > 0) && (
-          <div
-            className="flex items-center gap-2 text-xs"
-            style={{ color: 'var(--mars-color-text-secondary)' }}
-          >
-            <Timer className="w-3.5 h-3.5" />
-            {formatTime(elapsed)}
-          </div>
-        )}
-        {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (
-          <div
-            className="flex items-center gap-2 text-xs"
-            style={{ color: 'var(--mars-color-text-secondary)' }}
-          >
-            <DollarSign className="w-3.5 h-3.5" />
-            ${taskState.total_cost_usd.toFixed(4)}
-          </div>
-        )}
-      </div>
+      {(isExecuting || elapsed > 0 || (taskState?.total_cost_usd != null && taskState.total_cost_usd > 0)) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {(isExecuting || elapsed > 0) && (
+            <div
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-mono tabular-nums"
+              style={{
+                backgroundColor: 'var(--mars-color-surface-raised)',
+                color: 'var(--mars-color-text-secondary)',
+                border: '1px solid var(--mars-color-border)',
+              }}
+            >
+              <Timer className="w-3.5 h-3.5" style={{ color: 'var(--mars-color-primary)' }} />
+              {formatTime(elapsed)}
+            </div>
+          )}
+          {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (
+            <div
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-mono tabular-nums"
+              style={{
+                backgroundColor: 'var(--mars-color-surface-raised)',
+                color: 'var(--mars-color-text-secondary)',
+                border: '1px solid var(--mars-color-border)',
+              }}
+            >
+              <DollarSign className="w-3.5 h-3.5" style={{ color: 'var(--mars-color-success)' }} />
+              {taskState.total_cost_usd.toFixed(4)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Execution output — collapse to a compact summary once we have
           completed and the artifact browser is taking the spotlight */}
@@ -245,16 +380,22 @@ export default function ExecutionPanel({
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
-        <Button
+        <button
           onClick={handleNext}
-          variant="primary"
-          size="sm"
           disabled={!isCompleted}
+          className="mars-shimmer-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          style={{
+            background: !isCompleted
+              ? 'var(--mars-color-bg-tertiary)'
+              : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+            boxShadow: !isCompleted ? 'none' : '0 6px 22px rgba(99, 102, 241, 0.40), inset 0 1px 0 rgba(255,255,255,0.18)',
+            color: !isCompleted ? 'var(--mars-color-text-tertiary)' : 'white',
+          }}
         >
-          <Play className="w-3.5 h-3.5 mr-1.5" />
+          <Play className="w-3.5 h-3.5" fill="currentColor" />
           Generate Paper
-          <ArrowRight className="w-4 h-4 ml-1" />
-        </Button>
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
     </div>
   )

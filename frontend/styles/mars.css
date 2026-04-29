@@ -776,3 +776,271 @@ code, pre, kbd, samp {
 .mars-csv-table tr:hover td {
   background-color: var(--mars-color-bg-hover);
 }
+
+/* KaTeX math blocks within MarkdownRenderer */
+.mars-markdown .mars-math-display {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: var(--mars-space-3) 0;
+  text-align: center;
+}
+.mars-markdown .katex-display {
+  margin: 0;
+}
+.mars-markdown .katex {
+  font-size: 1em;
+  color: var(--mars-color-text);
+}
+
+/* Math placeholder shown until lazy-loaded KaTeX hydrates the spans */
+.mars-markdown .mars-math-pending {
+  font-family: var(--mars-font-mono);
+  color: var(--mars-color-text-secondary);
+  background-color: var(--mars-color-surface-overlay);
+  padding: 0 0.25em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   15. Dynamic Aesthetic Animations & Effects
+   -------------------------------------------------------------------------- */
+@keyframes mars-aurora {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes mars-float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes mars-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(139, 92, 246, 0.35),
+      0 0 40px rgba(99, 102, 241, 0.25),
+      0 8px 32px rgba(99, 102, 241, 0.30);
+  }
+  50% {
+    box-shadow:
+      0 0 32px rgba(139, 92, 246, 0.55),
+      0 0 64px rgba(99, 102, 241, 0.40),
+      0 8px 40px rgba(99, 102, 241, 0.45);
+  }
+}
+
+@keyframes mars-orbit {
+  from { transform: rotate(0deg) translateX(60px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(60px) rotate(-360deg); }
+}
+
+@keyframes mars-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+@keyframes mars-gradient-text {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes mars-progress-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes mars-sweep {
+  0%   { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(250%) skewX(-20deg); }
+}
+
+/* Animated aurora background — fills a parent and creates a slow shifting glow */
+.mars-aurora-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.mars-aurora-bg::before,
+.mars-aurora-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.45;
+  will-change: transform;
+}
+.mars-aurora-bg::before {
+  width: 480px;
+  height: 480px;
+  top: -120px;
+  left: -120px;
+  background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+  animation: mars-float 9s ease-in-out infinite;
+}
+.mars-aurora-bg::after {
+  width: 520px;
+  height: 520px;
+  bottom: -160px;
+  right: -160px;
+  background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+  animation: mars-float 11s ease-in-out infinite reverse;
+}
+[data-theme="light"] .mars-aurora-bg::before,
+[data-theme="light"] .mars-aurora-bg::after {
+  opacity: 0.25;
+}
+
+/* Animated multi-stop gradient (use as background) */
+.mars-gradient-animated {
+  background: linear-gradient(
+    135deg,
+    #8b5cf6 0%,
+    #6366f1 25%,
+    #3b82f6 50%,
+    #6366f1 75%,
+    #8b5cf6 100%
+  );
+  background-size: 300% 300%;
+  animation: mars-aurora 8s ease infinite;
+}
+
+/* Glowing element — apply on hero icons, primary CTAs */
+.mars-glow {
+  animation: mars-glow-pulse 3.5s ease-in-out infinite;
+}
+
+/* Floating idle motion */
+.mars-float {
+  animation: mars-float 6s ease-in-out infinite;
+}
+
+/* Animated text gradient — clip a gradient to text */
+.mars-text-gradient {
+  background: linear-gradient(
+    90deg,
+    #a78bfa 0%,
+    #818cf8 25%,
+    #60a5fa 50%,
+    #818cf8 75%,
+    #a78bfa 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: mars-gradient-text 6s linear infinite;
+}
+
+/* Card with subtle 3D lift + animated border on hover */
+.mars-card-tilt {
+  position: relative;
+  transition:
+    transform var(--mars-duration-slow) var(--mars-ease-standard),
+    box-shadow var(--mars-duration-slow) var(--mars-ease-standard),
+    border-color var(--mars-duration-slow) var(--mars-ease-standard);
+  will-change: transform;
+}
+.mars-card-tilt:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 12px 32px -8px rgba(99, 102, 241, 0.35),
+    0 4px 12px -4px rgba(0, 0, 0, 0.25);
+  border-color: rgba(139, 92, 246, 0.45) !important;
+}
+.mars-card-tilt::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(99, 102, 241, 0.0), rgba(99, 102, 241, 0.5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--mars-duration-slow) var(--mars-ease-standard);
+  pointer-events: none;
+}
+.mars-card-tilt:hover::before {
+  opacity: 1;
+}
+
+/* Shimmer sweep — overlays a button with a moving highlight on hover */
+.mars-shimmer-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.mars-shimmer-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  transform: translateX(-150%) skewX(-20deg);
+}
+.mars-shimmer-btn:hover::after {
+  animation: mars-sweep 0.9s ease-out;
+}
+
+/* Twinkling decorative dots */
+.mars-twinkle {
+  animation: mars-twinkle 3s ease-in-out infinite;
+}
+
+/* Animated progress bar — shimmer overlay on running bars */
+.mars-progress-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.mars-progress-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  animation: mars-progress-shimmer 1.8s linear infinite;
+}
+
+/* Soft glass surface */
+.mars-glass {
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  background-color: color-mix(in srgb, var(--mars-color-surface-raised) 75%, transparent);
+}
+
+/* Slide-up entry animation utility */
+.mars-anim-slide-up {
+  animation: mars-slide-up 0.5s var(--mars-ease-out) both;
+}
+.mars-anim-bounce-in {
+  animation: mars-bounce-in 0.6s var(--mars-ease-bounce) both;
+}
+.mars-anim-fade-in {
+  animation: mars-fade-in 0.6s var(--mars-ease-standard) both;
+}
+
+/* Stagger helpers (apply with delay) */
+.mars-delay-100 { animation-delay: 0.10s; }
+.mars-delay-200 { animation-delay: 0.20s; }
+.mars-delay-300 { animation-delay: 0.30s; }
+.mars-delay-400 { animation-delay: 0.40s; }

@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { Send, Check, Loader2, AlertTriangle } from 'lucide-react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { Send, Check, Loader2, AlertTriangle, GitCompare, ChevronDown, ChevronRight } from 'lucide-react'
 import type { RefinementMessage } from '@/types/deepresearch'
+import { diffLines, diffStats, type DiffLine } from '@/lib/lineDiff'
 
 interface RefinementChatProps {
   messages: RefinementMessage[]
@@ -66,10 +67,121 @@ function MethodBadge({ msg }: { msg: RefinementMessage }) {
   )
 }
 
+/**
+ * Inline before-vs-after view for an assistant refinement.
+ *
+ * Renders a compact line-by-line diff. Equal lines are collapsed into a
+ * "… N unchanged …" marker so users can focus on what actually changed.
+ */
+function DiffView({ original, refined }: { original: string; refined: string }) {
+  const lines = useMemo<DiffLine[]>(() => diffLines(original, refined), [original, refined])
+  const stats = useMemo(() => diffStats(lines), [lines])
+
+  // Collapse runs of >3 unchanged lines into a single elision marker.
+  const rendered: Array<DiffLine | { op: 'gap'; count: number }> = []
+  let runStart = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].op === 'equal') {
+      if (runStart < 0) runStart = i
+      continue
+    }
+    if (runStart >= 0) {
+      const run = i - runStart
+      if (run > 3) {
+        rendered.push(lines[runStart])
+        rendered.push({ op: 'gap', count: run - 2 })
+        rendered.push(lines[i - 1])
+      } else {
+        for (let k = runStart; k < i; k++) rendered.push(lines[k])
+      }
+      runStart = -1
+    }
+    rendered.push(lines[i])
+  }
+  if (runStart >= 0) {
+    const run = lines.length - runStart
+    if (run > 3) {
+      rendered.push(lines[runStart])
+      rendered.push({ op: 'gap', count: run - 2 })
+      rendered.push(lines[lines.length - 1])
+    } else {
+      for (let k = runStart; k < lines.length; k++) rendered.push(lines[k])
+    }
+  }
+
+  return (
+    <div
+      className="mt-2 rounded border overflow-hidden"
+      style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
+    >
+      <div
+        className="flex items-center justify-between px-2 py-1 text-[10px] border-b"
+        style={{
+          borderColor: 'var(--mars-color-border)',
+          backgroundColor: 'var(--mars-color-surface-overlay)',
+          color: 'var(--mars-color-text-secondary)',
+        }}
+      >
+        <span className="font-medium">Changes vs your prior content</span>
+        <span>
+          <span style={{ color: 'var(--mars-color-success, #16a34a)' }}>+{stats.added}</span>
+          {' '}
+          <span style={{ color: 'var(--mars-color-danger, #dc2626)' }}>-{stats.removed}</span>
+          {' '}
+          <span style={{ opacity: 0.7 }}>={stats.unchanged}</span>
+        </span>
+      </div>
+      <pre
+        className="m-0 text-[10px] leading-snug overflow-x-auto"
+        style={{ color: 'var(--mars-color-text)', maxHeight: '260px', whiteSpace: 'pre' }}
+      >
+        {rendered.map((row, idx) => {
+          if ('count' in row) {
+            return (
+              <div
+                key={`gap-${idx}`}
+                className="px-2 py-0.5 text-center"
+                style={{ color: 'var(--mars-color-text-tertiary)', backgroundColor: 'transparent' }}
+              >
+                ··· {row.count} unchanged line{row.count !== 1 ? 's' : ''} ···
+              </div>
+            )
+          }
+          const bg =
+            row.op === 'add'    ? 'rgba(34,197,94,0.12)' :
+            row.op === 'remove' ? 'rgba(239,68,68,0.12)' :
+            'transparent'
+          const sigil = row.op === 'add' ? '+' : row.op === 'remove' ? '-' : ' '
+          const fg =
+            row.op === 'add'    ? 'var(--mars-color-success, #16a34a)' :
+            row.op === 'remove' ? 'var(--mars-color-danger,  #dc2626)' :
+            'var(--mars-color-text-secondary)'
+          return (
+            <div
+              key={`${row.op}-${idx}`}
+              className="px-2"
+              style={{ backgroundColor: bg, color: fg }}
+            >
+              <span style={{ display: 'inline-block', width: '1ch', textAlign: 'center', opacity: 0.7 }}>{sigil}</span>
+              {' '}
+              <span style={{ color: 'var(--mars-color-text)' }}>{row.text || ' '}</span>
+            </div>
+          )
+        })}
+      </pre>
+    </div>
+  )
+}
+
 export default function RefinementChat({ messages, onSend, onApply, isLoading }: RefinementChatProps) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [diffExpanded, setDiffExpanded] = useState<Record<string, boolean>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const toggleDiff = useCallback((id: string) => {
+    setDiffExpanded(prev => ({ ...prev, [id]: !prev[id] }))
+  }, [])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -146,14 +258,33 @@ export default function RefinementChat({ messages, onSend, onApply, isLoading }:
               {msg.role === 'assistant' && (
                 <>
                   <MethodBadge msg={msg} />
-                  <button
-                    onClick={() => onApply(msg.content)}
-                    className="mt-2 flex items-center gap-1 text-xs font-medium"
-                    style={{ color: 'var(--mars-color-primary)' }}
-                  >
-                    <Check className="w-3 h-3" />
-                    Apply to editor
-                  </button>
+                  <div className="mt-2 flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => onApply(msg.content)}
+                      className="flex items-center gap-1 text-xs font-medium"
+                      style={{ color: 'var(--mars-color-primary)' }}
+                    >
+                      <Check className="w-3 h-3" />
+                      Apply to editor
+                    </button>
+                    {msg.original_content !== undefined && msg.original_content !== msg.content && (
+                      <button
+                        onClick={() => toggleDiff(msg.id)}
+                        className="flex items-center gap-1 text-xs font-medium"
+                        style={{ color: 'var(--mars-color-text-secondary)' }}
+                        title="Show line-by-line changes vs your prior content"
+                      >
+                        {diffExpanded[msg.id]
+                          ? <ChevronDown className="w-3 h-3" />
+                          : <ChevronRight className="w-3 h-3" />}
+                        <GitCompare className="w-3 h-3" />
+                        {diffExpanded[msg.id] ? 'Hide diff' : 'Show diff'}
+                      </button>
+                    )}
+                  </div>
+                  {diffExpanded[msg.id] && msg.original_content !== undefined && (
+                    <DiffView original={msg.original_content} refined={msg.content} />
+                  )}
                 </>
               )}
             </div>

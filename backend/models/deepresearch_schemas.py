@@ -190,3 +190,10 @@ class CompileTexResponse(BaseModel):
     pdf_path: Optional[str] = None
     success: bool
     log: str = ""
+
+
+class ExperimentPlanPreviewResponse(BaseModel):
+    """Response for POST /api/deepresearch/{task_id}/stages/3/plan-preview"""
+    plan_markdown: str = Field(..., description="Markdown-formatted plan summary")
+    based_on: List[str] = Field(default_factory=list,
+                                description="Source files used to build the plan (idea, methods, data context)")

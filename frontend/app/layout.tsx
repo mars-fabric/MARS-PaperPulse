@@ -5,7 +5,7 @@ import AppShell from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
   title: 'MARS - PaperPulse',
-  description: 'Deep Scientific Research Paper Generation',
+  description: 'PaperPulse — AI Research Paper Generation',
 }
 
 export default function RootLayout({

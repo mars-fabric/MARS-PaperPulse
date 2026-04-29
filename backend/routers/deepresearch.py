@@ -39,6 +39,7 @@ from models.deepresearch_schemas import (
     AiEditTexResponse,
     CompileTexRequest,
     CompileTexResponse,
+    ExperimentPlanPreviewResponse,
 )
 from core.logging import get_logger
 
@@ -1522,6 +1523,147 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
     except Exception as e:
         logger.error("deepresearch_refine_failed error=%s", e)
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
+
+
+def _pick_plan_preview_model(task_meta: dict | None) -> tuple[str, str]:
+    """Resolve which LLM to use for the cheap plan-preview call.
+
+    Priority:
+      1. ``task_meta['config']['planner_model']`` if the user set one for this task
+      2. The active provider's "default" / first model from the registry
+      3. A static fallback ('gpt-4o-mini') so the endpoint still works in
+         barebones dev environments.
+
+    Returns ``(model_id, source_label)``. ``source_label`` is logged so we
+    can debug which path was taken.
+    """
+    cfg = (task_meta or {}).get("config") or {}
+    user_pick = cfg.get("planner_model") or cfg.get("orchestration_model")
+    if user_pick:
+        return str(user_pick), "task_config"
+
+    try:
+        from cmbagent.providers.registry import ProviderRegistry
+        registry = ProviderRegistry.instance()
+        models = registry.get_available_models_for_configured_providers() or []
+        if models:
+            # Prefer a small/cheap model if one is obvious; otherwise first
+            cheap_keywords = ("mini", "flash", "haiku", "small", "nano", "lite")
+            for m in models:
+                mid = (m.get("model_id") or m.get("id") or "").lower()
+                if any(k in mid for k in cheap_keywords):
+                    return m.get("model_id") or m.get("id") or "", "configured_cheap"
+            first = models[0]
+            picked = first.get("model_id") or first.get("id")
+            if picked:
+                return picked, "configured_first"
+    except Exception:
+        pass
+
+    return "gpt-4o-mini", "static_fallback"
+
+
+@router.post(
+    "/{task_id}/stages/3/plan-preview",
+    response_model=ExperimentPlanPreviewResponse,
+)
+async def preview_experiment_plan(task_id: str):
+    """Generate a cheap preview of the experiment plan *before* committing to
+    a full Stage-3 execution.
+
+    Reads the idea/methods/data context from disk, asks an LLM for a short
+    bulleted plan summary (steps, expected outputs, risks), and returns it
+    as markdown. No artifacts are written; this does not advance the stage.
+    """
+    import concurrent.futures
+    from cmbagent.database.models import WorkflowRun
+
+    db = _get_db()
+    try:
+        parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Task not found")
+        meta = parent.meta or {}
+        work_dir = meta.get("work_dir") or _get_work_dir(task_id)
+    finally:
+        db.close()
+
+    input_dir = os.path.join(work_dir, "input_files")
+    parts: list[str] = []
+    based_on: list[str] = []
+
+    def _read(name: str, label: str) -> None:
+        p = os.path.join(input_dir, name)
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    txt = f.read().strip()
+                if txt:
+                    parts.append(f"## {label}\n\n{txt}")
+                    based_on.append(name)
+            except Exception:
+                pass
+
+    _read("idea.md", "Research Idea")
+    _read("methods.md", "Methodology")
+    _read("data_context.md", "Data Context")
+    _read("data_description.md", "Data Description")
+
+    if not parts:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot preview plan: idea.md and methods.md not found in "
+                "input_files. Run Stage 1 and Stage 2 first."
+            ),
+        )
+
+    research_context = "\n\n".join(parts)
+
+    prompt = (
+        "You are an experiment-planning assistant for a research codebase. "
+        "Given the research idea, methodology, and any data context below, "
+        "produce a SHORT actionable plan that the engineer agent will execute "
+        "in Stage 3.\n\n"
+        "Output a markdown document with these sections:\n"
+        "  1. **Steps** — numbered list (max 6) of concrete actions: data prep, "
+        "model fits, statistical tests, plots. Each item one line.\n"
+        "  2. **Expected outputs** — bullets: which figures, metrics, or "
+        "tables Stage 3 should produce.\n"
+        "  3. **Risks / unknowns** — bullets: what could fail or take longer "
+        "than expected. Be specific to the data described above.\n\n"
+        "Be concise. Do not invent data sources not implied by the inputs. "
+        "Do not output code.\n\n"
+        f"### Inputs\n\n{research_context}\n"
+    )
+
+    model, source = _pick_plan_preview_model(meta)
+    logger.info("plan_preview_model task=%s model=%s source=%s", task_id, model, source)
+
+    def _llm_call() -> str:
+        from cmbagent.llm_provider import safe_completion
+        resp = safe_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            temperature=0.3,
+            max_tokens=1200,
+        )
+        # safe_completion returns either a string or an object with .content
+        if isinstance(resp, str):
+            return resp
+        return getattr(resp, "content", str(resp))
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            plan_md = await asyncio.get_running_loop().run_in_executor(executor, _llm_call)
+    except Exception as e:
+        logger.error("plan_preview_failed task=%s model=%s error=%s", task_id, model, e)
+        raise HTTPException(status_code=500, detail=f"Plan preview failed: {e}")
+
+    return ExperimentPlanPreviewResponse(
+        plan_markdown=plan_md.strip() if isinstance(plan_md, str) else str(plan_md),
+        based_on=based_on,
+    )
 
 
 # =============================================================================

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2 } from 'lucide-react'
+import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2, Check, Cloud } from 'lucide-react'
 import { Button } from '@/components/core'
 import RefinementChat from './RefinementChat'
 import ExecutionProgress from './ExecutionProgress'
@@ -160,38 +160,81 @@ export default function ReviewPanel({
     onNext()
   }, [canEdit, saveStageContent, stageNum, editableContent, sharedKey, taskState, executeStage, onNext])
 
-  // Pre-execution: stage not started yet — compact header with gear icon
+  // Pre-execution: stage not started yet — modern hero card
   if (isStageNotStarted && !isExecuting) {
     return (
-      <div className="max-w-3xl mx-auto space-y-3">
-        {/* Header bar */}
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm font-semibold" style={{ color: 'var(--mars-color-text)' }}>
-            {stageName}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(s => !s)}
-              title="Advanced settings"
-              className="p-1.5 rounded-mars-sm transition-colors"
-              style={{
-                color: showSettings ? 'var(--mars-color-accent)' : 'var(--mars-color-text-secondary)',
-                backgroundColor: showSettings ? 'var(--mars-color-accent-subtle, rgba(99,102,241,0.1))' : 'transparent',
-              }}
-            >
-              <Settings2 className="w-4 h-4" />
-            </button>
-            <Button onClick={() => executeStage(stageNum)} variant="primary" size="sm">
-              <Play className="w-3.5 h-3.5 mr-1.5" />
-              Run {stageName}
-            </Button>
+      <div className="max-w-3xl mx-auto space-y-4 mars-anim-fade-in">
+        {/* Hero card */}
+        <div
+          className="relative rounded-2xl border p-6 overflow-hidden"
+          style={{
+            background: 'linear-gradient(180deg, var(--mars-color-surface-raised), var(--mars-color-surface))',
+            borderColor: 'var(--mars-color-border)',
+            boxShadow: '0 4px 16px -8px rgba(0,0,0,0.20)',
+          }}
+        >
+          {/* Soft accent glow in corner */}
+          <div
+            aria-hidden
+            className="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-30 blur-3xl pointer-events-none"
+            style={{ background: 'radial-gradient(circle, #8b5cf6, transparent 70%)' }}
+          />
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center mars-glow"
+                  style={{
+                    background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  }}
+                >
+                  <Play className="w-4 h-4 text-white" fill="white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--mars-color-text)' }}>
+                    {stageName}
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                    Ready to run
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm mt-3" style={{ color: 'var(--mars-color-text-secondary)' }}>
+                Hit <span className="font-semibold" style={{ color: 'var(--mars-color-text)' }}>Run</span> to start. Output is streamed live; you can edit and refine afterwards.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowSettings(s => !s)}
+                title="Advanced settings"
+                className="p-2 rounded-lg transition-all duration-150 hover:scale-105"
+                style={{
+                  color: showSettings ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                  backgroundColor: showSettings ? 'var(--mars-color-primary-subtle)' : 'var(--mars-color-surface-overlay)',
+                  border: '1px solid var(--mars-color-border)',
+                }}
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => executeStage(stageNum)}
+                className="mars-shimmer-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  boxShadow: '0 6px 22px rgba(99, 102, 241, 0.40), inset 0 1px 0 rgba(255,255,255,0.18)',
+                }}
+              >
+                <Play className="w-3.5 h-3.5" fill="currentColor" />
+                Run {stageName}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Inline settings panel (collapsed by default) */}
         {showSettings && (
           <div
-            className="p-4 rounded-mars-md border space-y-4"
+            className="p-5 rounded-xl border space-y-4 mars-anim-slide-up"
             style={{
               backgroundColor: 'var(--mars-color-surface-overlay)',
               borderColor: 'var(--mars-color-border)',
@@ -283,50 +326,95 @@ export default function ReviewPanel({
   }
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '500px' }}>
+    <div className="flex flex-col mars-anim-fade-in" style={{ minHeight: '500px' }}>
       {/* Split view: Editor (60%) + Chat (40%) */}
       <div className="flex flex-1 gap-4" style={{ minHeight: '400px' }}>
         {/* Editor panel */}
         <div
-          className="flex-[3] flex flex-col rounded-mars-md border overflow-hidden"
+          className="flex-[3] flex flex-col rounded-xl border overflow-hidden"
           style={{
             borderColor: 'var(--mars-color-border)',
-            backgroundColor: 'var(--mars-color-surface)',
+            backgroundColor: 'var(--mars-color-surface-raised)',
+            boxShadow: '0 4px 16px -8px rgba(0,0,0,0.20)',
           }}
         >
           {/* Editor toolbar */}
           <div
-            className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
-            style={{ borderColor: 'var(--mars-color-border)' }}
+            className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
+            style={{
+              borderColor: 'var(--mars-color-border)',
+              background: 'linear-gradient(180deg, var(--mars-color-surface-overlay), transparent)',
+            }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-1.5 h-5 rounded-full"
+                style={{ background: 'linear-gradient(180deg, #8b5cf6, #6366f1)' }}
+              />
               <span
-                className="text-sm font-medium"
+                className="text-sm font-semibold tracking-tight"
                 style={{ color: 'var(--mars-color-text)' }}
               >
                 {stageName}
               </span>
 
-              {/* Save indicator */}
-              {saveIndicator === 'saving' && (
-                <span className="text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
-                  Saving...
-                </span>
-              )}
-              {saveIndicator === 'saved' && (
-                <span className="text-xs" style={{ color: 'var(--mars-color-success)' }}>
-                  Saved
-                </span>
+              {/* Save indicator — always visible so user knows autosave is active */}
+              {canEdit && (
+                saveIndicator === 'saving' ? (
+                  <span
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    style={{
+                      backgroundColor: 'var(--mars-color-surface-overlay)',
+                      color: 'var(--mars-color-text-tertiary)',
+                    }}
+                  >
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Saving…
+                  </span>
+                ) : saveIndicator === 'saved' ? (
+                  <span
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    style={{
+                      backgroundColor: 'var(--mars-color-success-subtle)',
+                      color: 'var(--mars-color-success)',
+                      border: '1px solid rgba(34,197,94,0.30)',
+                    }}
+                  >
+                    <Check className="w-3 h-3" />
+                    Saved
+                  </span>
+                ) : (
+                  <span
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    style={{
+                      backgroundColor: 'var(--mars-color-surface-overlay)',
+                      color: 'var(--mars-color-text-tertiary)',
+                    }}
+                    title="Changes are saved automatically as you type"
+                  >
+                    <Cloud className="w-3 h-3" />
+                    Auto-save
+                  </span>
+                )
               )}
             </div>
 
-            <div className="flex items-center gap-1">
+            <div
+              className="flex items-center gap-0.5 p-0.5 rounded-lg"
+              style={{
+                backgroundColor: 'var(--mars-color-surface-sunken)',
+                border: '1px solid var(--mars-color-border)',
+              }}
+            >
               <button
                 onClick={() => setMode('edit')}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md font-medium transition-all duration-150"
                 style={{
-                  backgroundColor: mode === 'edit' ? 'var(--mars-color-primary-subtle)' : 'transparent',
+                  background: mode === 'edit'
+                    ? 'linear-gradient(135deg, rgba(139,92,246,0.20), rgba(99,102,241,0.20))'
+                    : 'transparent',
                   color: mode === 'edit' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                  border: mode === 'edit' ? '1px solid rgba(139,92,246,0.35)' : '1px solid transparent',
                 }}
               >
                 <Edit3 className="w-3 h-3" />
@@ -334,22 +422,25 @@ export default function ReviewPanel({
               </button>
               <button
                 onClick={() => setMode('preview')}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md font-medium transition-all duration-150"
                 style={{
-                  backgroundColor: mode === 'preview' ? 'var(--mars-color-primary-subtle)' : 'transparent',
+                  background: mode === 'preview'
+                    ? 'linear-gradient(135deg, rgba(139,92,246,0.20), rgba(99,102,241,0.20))'
+                    : 'transparent',
                   color: mode === 'preview' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                  border: mode === 'preview' ? '1px solid rgba(139,92,246,0.35)' : '1px solid transparent',
                 }}
               >
                 <Eye className="w-3 h-3" />
                 Preview
               </button>
+              <span className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--mars-color-border)' }} />
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors ml-2"
-                style={{
-                  color: 'var(--mars-color-text-secondary)',
-                }}
+                title="Save now (auto-save also runs ~1s after you stop typing)"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md font-medium transition-all duration-150 hover:bg-[var(--mars-color-bg-hover)]"
+                style={{ color: 'var(--mars-color-text-secondary)' }}
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -377,10 +468,11 @@ export default function ReviewPanel({
 
         {/* Chat panel */}
         <div
-          className="flex-[2] rounded-mars-md border overflow-hidden flex flex-col"
+          className="flex-[2] rounded-xl border overflow-hidden flex flex-col"
           style={{
             borderColor: 'var(--mars-color-border)',
-            backgroundColor: 'var(--mars-color-surface)',
+            backgroundColor: 'var(--mars-color-surface-raised)',
+            boxShadow: '0 4px 16px -8px rgba(0,0,0,0.20)',
           }}
         >
           <RefinementChat
@@ -439,15 +531,21 @@ export default function ReviewPanel({
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </Button>
-          <Button
+          <button
             onClick={handleNext}
-            variant="primary"
-            size="sm"
             disabled={!canEdit}
+            className="mars-shimmer-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            style={{
+              background: !canEdit
+                ? 'var(--mars-color-bg-tertiary)'
+                : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+              boxShadow: !canEdit ? 'none' : '0 6px 22px rgba(99, 102, 241, 0.40), inset 0 1px 0 rgba(255,255,255,0.18)',
+              color: !canEdit ? 'var(--mars-color-text-tertiary)' : 'white',
+            }}
           >
             {stageNum < 4 ? NEXT_STAGE_LABEL[stageNum] : 'Next'}
-            <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>

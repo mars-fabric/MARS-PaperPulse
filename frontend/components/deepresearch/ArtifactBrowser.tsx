@@ -126,7 +126,7 @@ export default function ArtifactBrowser({
       >
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold" style={{ color: 'var(--mars-color-text)' }}>
-            Stage 3 artifacts
+            Artifacts
           </span>
           <button
             onClick={handleRefresh}

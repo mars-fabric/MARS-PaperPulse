@@ -61,8 +61,23 @@ export default function StageAdvancedSettings({ stageNum, cfg, updateCfg }: Stag
   const d = (stage: number | 'default', role: string, fallback: string) =>
     resolveStageDefault(workflowDefaults, 'deepresearch', stage, role, fallback)
 
+  const stageBlurb: Record<number, string> = {
+    1: 'Idea generation uses a maker/critic loop. Stronger maker = bolder ideas; stronger critic = tighter framing.',
+    2: 'Method development plans the research approach. Researcher model writes; planner/reviewer shape the plan tree.',
+    3: 'Experiment execution runs code with retry logic. Tune Max Attempts/Steps to control resilience and runtime.',
+    4: 'Paper generation drafts LaTeX section by section. Journal preset controls the final compile template.',
+  }
+
   return (
     <div className="space-y-4">
+      {stageBlurb[stageNum] && (
+        <p
+          className="text-[11px] leading-snug -mt-1"
+          style={{ color: 'var(--mars-color-text-tertiary)' }}
+        >
+          {stageBlurb[stageNum]}
+        </p>
+      )}
 
       {stageNum === 1 && (
         <>
@@ -101,9 +116,13 @@ export default function StageAdvancedSettings({ stageNum, cfg, updateCfg }: Stag
                 value={cfg.max_n_attempts ?? ''}
                 onChange={(e) => updateCfg({ max_n_attempts: e.target.value ? parseInt(e.target.value) : undefined })}
                 placeholder="10"
+                title="How many times the engineer agent retries a single failing step before giving up. Higher = more resilient but slower/costlier on hard steps."
                 className="w-full rounded border px-2 py-1.5 text-xs outline-none"
                 style={{ backgroundColor: 'var(--mars-color-surface)', borderColor: 'var(--mars-color-border)', color: 'var(--mars-color-text)' }}
               />
+              <p className="text-[11px] mt-1 leading-snug" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                Retries per failing step before the engineer gives up. Raise it if your code/data is brittle.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--mars-color-text-secondary)' }}>
@@ -114,9 +133,13 @@ export default function StageAdvancedSettings({ stageNum, cfg, updateCfg }: Stag
                 value={cfg.max_n_steps ?? ''}
                 onChange={(e) => updateCfg({ max_n_steps: e.target.value ? parseInt(e.target.value) : undefined })}
                 placeholder="6"
+                title="Maximum number of plan steps the experiment is allowed to expand into. Caps total runtime."
                 className="w-full rounded border px-2 py-1.5 text-xs outline-none"
                 style={{ backgroundColor: 'var(--mars-color-surface)', borderColor: 'var(--mars-color-border)', color: 'var(--mars-color-text)' }}
               />
+              <p className="text-[11px] mt-1 leading-snug" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                Caps how many plan steps the experiment expands into. Lower = faster but shallower analysis.
+              </p>
             </div>
           </div>
         </>

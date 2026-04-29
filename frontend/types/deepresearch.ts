@@ -108,6 +108,9 @@ export interface RefinementMessage {
   method?: 'diff' | 'fallback'
   edits_applied?: number
   edits_failed?: number
+  /** On assistant messages: the document content that was sent in for refinement,
+   * captured so the chat can show a before/after diff. */
+  original_content?: string
 }
 
 export interface UploadedFile {

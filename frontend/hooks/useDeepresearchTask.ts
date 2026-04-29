@@ -60,6 +60,7 @@ interface UseDeepresearchTaskReturn {
   refineFileContext: (message: string, content: string) => Promise<string | null>
   saveFileContext: (content: string) => Promise<void>
   setFileContext: (content: string) => void
+  previewExperimentPlan: () => Promise<{ plan_markdown: string; based_on: string[] } | null>
   setCurrentStep: (step: DeepresearchWizardStep) => void
   setEditableContent: (content: string) => void
   resumeTask: (taskId: string) => Promise<void>
@@ -402,6 +403,7 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
         method: resp.method,
         edits_applied: resp.edits_applied,
         edits_failed: resp.edits_failed,
+        original_content: content,
       }
       setRefinementMessages(prev => [...prev, assistantMsg])
       return resp.refined_content
@@ -556,6 +558,21 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       setFileContext(content)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save context')
+    }
+  }, [apiFetch])
+
+  const previewExperimentPlan = useCallback(async (): Promise<{ plan_markdown: string; based_on: string[] } | null> => {
+    const id = taskIdRef.current
+    if (!id) return null
+    try {
+      const resp = await apiFetch(
+        `/api/deepresearch/${id}/stages/3/plan-preview`,
+        { method: 'POST' },
+      )
+      return resp as { plan_markdown: string; based_on: string[] }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Plan preview failed')
+      return null
     }
   }, [apiFetch])
 
@@ -722,6 +739,7 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     refineFileContext,
     saveFileContext,
     setFileContext,
+    previewExperimentPlan,
     setCurrentStep: setCurrentStep as (step: DeepresearchWizardStep) => void,
     setEditableContent,
     resumeTask,

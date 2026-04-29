@@ -316,9 +316,11 @@ def save_paper(state: GraphState, paper_name: str):
     paper = rf"""\documentclass[{journaldict.layout}]{{{journaldict.article}}}
 
 \usepackage{{amsmath}}
+\usepackage{{amssymb}}
+\usepackage{{mathtools}}
 \usepackage{{multirow}}
 \usepackage{{natbib}}
-\usepackage{{graphicx}} 
+\usepackage{{graphicx}}
 \usepackage{{tabularx}}
 {journaldict.usepackage}
 

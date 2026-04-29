@@ -106,9 +106,11 @@ def temp_file(state, fin, action, text=None, json_file=False):
                 latex_text = rf"""\documentclass[{journaldict.layout}]{{{journaldict.article}}}
 
 \usepackage{{amsmath}}
+\usepackage{{amssymb}}
+\usepackage{{mathtools}}
 \usepackage{{multirow}}
 \usepackage{{natbib}}
-\usepackage{{graphicx}} 
+\usepackage{{graphicx}}
 {journaldict.usepackage}
 
 \begin{{document}}
@@ -269,6 +271,8 @@ def clean_section(text, section):
     text = text.replace(r"```latex", "")
     text = text.replace(r"```", "")
     text = text.replace(r"\usepackage{amsmath}", "")
+    text = text.replace(r"\usepackage{amssymb}", "")
+    text = text.replace(r"\usepackage{mathtools}", "")
 
     return text
 

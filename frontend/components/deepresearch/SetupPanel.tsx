@@ -123,9 +123,18 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
               color: 'white',
             }}
           >
-            3
+            2
           </span>
           Research Data Files
+          <span
+            className="ml-1 text-[10px] font-normal px-1.5 py-0.5 rounded-full"
+            style={{
+              backgroundColor: 'var(--mars-color-surface-overlay)',
+              color: 'var(--mars-color-text-tertiary)',
+            }}
+          >
+            optional
+          </span>
           <span
             className="ml-1 text-[11px] font-normal"
             style={{ color: 'var(--mars-color-text-tertiary)' }}

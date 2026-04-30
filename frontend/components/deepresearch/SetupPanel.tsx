@@ -14,16 +14,6 @@ interface SetupPanelProps {
   onNext: () => void
 }
 
-const JOURNAL_LABELS: Record<string, string> = {
-  '': '',
-  AAS:     'AAS — Astrophysical Journal (ApJ)',
-  APS:     'APS — Physical Review Letters / PRA',
-  JHEP:    'JHEP / JCAP',
-  ICML:    'ICML',
-  NeurIPS: 'NeurIPS',
-  PASJ:    'PASJ — Publications of the Astronomical Society of Japan',
-}
-
 export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
   const {
     autoCreateTask,
@@ -44,7 +34,6 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
   } = hook
 
   const [description, setDescription] = useState('')
-  const [goal, setGoal] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
@@ -63,22 +52,12 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
 
   const handleSubmit = useCallback(async () => {
     if (!description.trim()) return
-    // Prepend the user's stated goal/venue to the description so downstream
-    // agents (idea, methods, paper) can frame their output around it. The
-    // chosen journal/format preset is also stored in taskConfig.journal.
-    const goalLabel = JOURNAL_LABELS[taskConfig.journal ?? '']
-    const goalLines: string[] = []
-    if (goalLabel) goalLines.push(`Target venue/format: ${goalLabel}`)
-    if (goal.trim()) goalLines.push(`Goal: ${goal.trim()}`)
-    const enriched = goalLines.length
-      ? `${goalLines.join('\n')}\n\n${description}`
-      : description
     // createTask updates the description if task already exists, or creates fresh
-    const id = await createTask(enriched, undefined)
+    const id = await createTask(description, undefined)
     if (!id) return // creation failed — stay on this step, error is shown by hook
     await executeStage(1, id)
     onNext()
-  }, [description, goal, taskConfig.journal, createTask, executeStage, onNext])
+  }, [description, createTask, executeStage, onNext])
 
   const hasUploadedFiles = uploadedFiles.some(f => f.status === 'done')
 
@@ -129,81 +108,6 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
         >
           Be specific about your research goals. The AI will generate ideas based on this description and your uploaded data.
         </p>
-      </section>
-
-      {/* Upfront goal & target venue — frames idea / method / paper generation */}
-      <section
-        className="rounded-xl border p-4 space-y-3.5 mars-anim-slide-up mars-delay-100"
-        style={{
-          borderColor: 'var(--mars-color-border)',
-          background: 'linear-gradient(180deg, var(--mars-color-surface-raised) 0%, var(--mars-color-surface) 100%)',
-        }}
-      >
-        <div className="flex items-baseline justify-between">
-          <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--mars-color-text)' }}>
-            <span
-              className="inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] font-bold"
-              style={{
-                background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                color: 'white',
-              }}
-            >
-              2
-            </span>
-            Target venue & goal
-            <span className="ml-1 text-[10px] font-normal px-1.5 py-0.5 rounded-full" style={{
-              backgroundColor: 'var(--mars-color-surface-overlay)',
-              color: 'var(--mars-color-text-tertiary)',
-            }}>
-              optional
-            </span>
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-[11px] font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--mars-color-text-secondary)' }}>
-            Target venue / format
-          </label>
-          <select
-            value={taskConfig.journal ?? ''}
-            onChange={(e) => updateCfg({ journal: e.target.value || undefined })}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-all duration-200 focus:border-[var(--mars-color-primary)] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)]"
-            style={{
-              backgroundColor: 'var(--mars-color-surface-sunken)',
-              borderColor: 'var(--mars-color-border)',
-              color: 'var(--mars-color-text)',
-            }}
-          >
-            <option value="">— not decided yet / generic LaTeX —</option>
-            <option value="AAS">AAS — Astrophysical Journal (ApJ)</option>
-            <option value="APS">APS — Physical Review Letters / PRA</option>
-            <option value="JHEP">JHEP / JCAP</option>
-            <option value="ICML">ICML</option>
-            <option value="NeurIPS">NeurIPS</option>
-            <option value="PASJ">PASJ — Publications of the Astronomical Society of Japan</option>
-          </select>
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--mars-color-text-tertiary)' }}>
-            Stored once and reused for the final paper compile (Stage 4). You can change it later.
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-[11px] font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--mars-color-text-secondary)' }}>
-            Outcome goal
-          </label>
-          <input
-            type="text"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            placeholder="e.g. submit to NeurIPS workshop, internal IP filing, MS thesis chapter…"
-            className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-all duration-200 focus:border-[var(--mars-color-primary)] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)]"
-            style={{
-              backgroundColor: 'var(--mars-color-surface-sunken)',
-              borderColor: 'var(--mars-color-border)',
-              color: 'var(--mars-color-text)',
-            }}
-          />
-        </div>
       </section>
 
       {/* Research data files */}

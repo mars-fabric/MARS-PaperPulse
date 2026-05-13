@@ -171,6 +171,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
   { value: 'claude-3.5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
   // AWS Bedrock
+  { value: 'bedrock/openai.gpt-oss-120b-1:0', label: 'GPT-OSS 120B (Bedrock) — default for AWS' },
   { value: 'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2 (Bedrock)' },
   { value: 'bedrock/anthropic.claude-sonnet-4-20250514-v1:0', label: 'Claude Sonnet 4 (Bedrock)' },
   { value: 'bedrock/amazon.nova-pro-v1:0', label: 'Amazon Nova Pro (Bedrock)' },

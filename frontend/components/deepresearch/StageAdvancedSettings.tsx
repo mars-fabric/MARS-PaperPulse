@@ -4,6 +4,8 @@ import React from 'react'
 import type { DeepresearchStageConfig } from '@/types/deepresearch'
 import { useModelConfig, resolveStageDefault, type ModelOption } from '@/hooks/useModelConfig'
 
+const CUSTOM_SENTINEL = '__custom__'
+
 function ModelSelect({
   label,
   value,
@@ -17,6 +19,16 @@ function ModelSelect({
   onChange: (v: string) => void
   models: ModelOption[]
 }) {
+  const knownValues = React.useMemo(() => new Set(models.map((m) => m.value)), [models])
+  // Custom mode is implied when `value` is set and not in the known list, but
+  // we also need to keep it sticky when the user picks Custom… and the input
+  // is still empty (value === undefined). Hence the local state flag.
+  const valueIsCustom = !!value && !knownValues.has(value)
+  const [customSticky, setCustomSticky] = React.useState<boolean>(valueIsCustom)
+  const isCustom = valueIsCustom || customSticky
+
+  const selectValue = isCustom ? CUSTOM_SENTINEL : (value ?? '')
+
   return (
     <div>
       <label
@@ -27,8 +39,17 @@ function ModelSelect({
         <span className="ml-1 font-normal opacity-60">(default: {defaultValue})</span>
       </label>
       <select
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v === CUSTOM_SENTINEL) {
+            setCustomSticky(true)
+            onChange('') // clear preset until the user types
+          } else {
+            setCustomSticky(false)
+            onChange(v)
+          }
+        }}
         className="w-full rounded border px-2 py-1.5 text-xs outline-none transition-colors"
         style={{
           backgroundColor: 'var(--mars-color-surface)',
@@ -42,7 +63,22 @@ function ModelSelect({
             {m.label}
           </option>
         ))}
+        <option value={CUSTOM_SENTINEL}>Custom…</option>
       </select>
+      {isCustom && (
+        <input
+          type="text"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="e.g. bedrock/openai.gpt-oss-120b-1:0"
+          className="mt-1 w-full rounded border px-2 py-1.5 text-xs outline-none transition-colors"
+          style={{
+            backgroundColor: 'var(--mars-color-surface)',
+            borderColor: 'var(--mars-color-border)',
+            color: 'var(--mars-color-text)',
+          }}
+        />
+      )}
     </div>
   )
 }

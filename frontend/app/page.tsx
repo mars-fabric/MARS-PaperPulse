@@ -109,16 +109,27 @@ export default function Home() {
   const handleDeleteSession = useCallback(async (taskId: string) => {
     if (!confirm('Delete this session? This will remove all data and files.')) return
     try {
-      await fetch(getApiUrl(`/api/deepresearch/${taskId}`), { method: 'DELETE' })
+      const resp = await fetch(getApiUrl(`/api/deepresearch/${taskId}`), { method: 'DELETE' })
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`
+        try {
+          const body = await resp.json()
+          if (body?.detail) detail = String(body.detail)
+        } catch {}
+        alert(`Failed to delete session: ${detail}`)
+        return
+      }
       setSessions(prev => prev.filter(s => s.task_id !== taskId))
       if (activeTaskId === taskId) {
         setShowTask(false)
         setActiveTaskId(null)
       }
-    } catch {
-      // ignore
+      // Re-sync from server so a slow delete can't be undone by the 10s poll.
+      fetchSessions()
+    } catch (err) {
+      alert(`Failed to delete session: ${err instanceof Error ? err.message : String(err)}`)
     }
-  }, [activeTaskId])
+  }, [activeTaskId, fetchSessions])
 
   return (
     <div className="flex flex-col h-full">

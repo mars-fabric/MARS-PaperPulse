@@ -2297,15 +2297,32 @@ async def delete_task(task_id: str):
             raise HTTPException(status_code=404, detail="Task not found")
 
         work_dir = (parent.meta or {}).get("work_dir")
+        session_id = parent.session_id
 
-        # TaskStage rows cascade-delete via FK, but delete explicitly for clarity
-        repo = _get_stage_repo(db, session_id=parent.session_id)
-        stages = repo.list_stages(parent_run_id=task_id)
-        for s in stages:
-            db.delete(s)
+        try:
+            # TaskStage rows first (cascade in model, explicit for SQLite-migrated DBs).
+            repo = _get_stage_repo(db, session_id=session_id)
+            stages = repo.list_stages(parent_run_id=task_id)
+            for s in stages:
+                db.delete(s)
+            db.flush()
 
-        db.delete(parent)
-        db.commit()
+            # Orphaned child stage runs — parent_run_id FK is "SET NULL" so they
+            # otherwise linger. Delete them explicitly to keep the DB clean.
+            child_runs = db.query(WorkflowRun).filter(WorkflowRun.parent_run_id == task_id).all()
+            for c in child_runs:
+                db.delete(c)
+            db.flush()
+
+            db.delete(parent)
+            db.commit()
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as exc:
+            db.rollback()
+            logger.exception("deepresearch_delete_failed task_id=%s error=%s", task_id, exc)
+            raise HTTPException(status_code=500, detail=f"Delete failed: {exc}") from exc
     finally:
         db.close()
 

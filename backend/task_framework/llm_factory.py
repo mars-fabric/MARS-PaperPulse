@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _BEDROCK_DEFAULT_MODEL = os.getenv(
     "CMBAGENT_BEDROCK_DEFAULT_MODEL",
-    "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "openai.gpt-oss-120b-1:0",
 )
 
 # Bedrock read_timeout / connect_timeout in seconds. Default 600s because

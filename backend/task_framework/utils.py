@@ -11,26 +11,40 @@ logger = logging.getLogger(__name__)
 MD_CODE_BLOCK_PATTERN = r"```(?:markdown)?\s*\n([\s\S]*?)```"
 
 
-def get_task_result(chat_history: list, name: str) -> str:
-    """Extract the last result from a specific agent in chat history.
+def get_task_result(chat_history: list, name: str, min_chars: int = 500) -> str:
+    """Extract the substantive result message from a specific agent.
 
-    Copied from Deepresearch/deepresearch/utils.py:62-68. Iterates backwards through
-    chat history to find the last message from the named agent.
+    Why longest, not last: in mars_cmbagent 2.0, agents like ``researcher``
+    often emit a short transition message ("I will complete Step 1...") as
+    their final entry; the actual content lives in earlier messages from the
+    same agent. Picking the longest message (above a min threshold) handles
+    both 1.x (last == content) and 2.0 (longest == content) without a sentinel.
 
     Args:
         chat_history: List of message dicts with 'name' and 'content' keys
-        name: Agent name to search for (e.g., 'idea_maker_nest', 'researcher_response_formatter')
+        name: Agent name to search for
+        min_chars: Minimum non-whitespace length to qualify; below this the
+            message is treated as a transition/control msg, not real output.
 
     Returns:
-        Content string from the agent's last message
+        The longest message content from ``name`` that meets ``min_chars``.
 
     Raises:
-        ValueError: If agent name not found in chat history
+        ValueError: If no qualifying message is found.
     """
-    for obj in chat_history[::-1]:
-        if obj.get('name') == name:
-            return obj['content']
-    raise ValueError(f"Agent '{name}' not found in chat history")
+    candidates = [
+        obj.get('content', '') for obj in chat_history
+        if obj.get('name') == name and obj.get('content')
+    ]
+    if not candidates:
+        raise ValueError(f"Agent '{name}' not found in chat history")
+    longest = max(candidates, key=lambda c: len(c.strip()))
+    if len(longest.strip()) < min_chars:
+        raise ValueError(
+            f"Agent '{name}' messages all below min_chars={min_chars}; "
+            f"longest was {len(longest.strip())} chars"
+        )
+    return longest
 
 
 def format_prompt(template: str, **kwargs) -> str:

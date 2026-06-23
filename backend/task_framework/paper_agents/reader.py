@@ -19,12 +19,41 @@ def preprocess_node(state: GraphState, config: RunnableConfig):
     """
 
     # set the LLM
-    if 'gemini' in state['llm']['model']:
+    model_name = state['llm']['model']
+    # Bedrock routing: "bedrock/" prefix is the signal. Strip it for the
+    # ChatBedrock model_id, which expects bare Bedrock IDs like
+    # "us.anthropic.claude-sonnet-4-5-20250929-v1:0".
+    if model_name.startswith('bedrock/'):
+        from langchain_aws import ChatBedrock  # lazy import — optional dep
+        from botocore.config import Config as BotoConfig
+        bedrock_model_id = model_name.removeprefix('bedrock/')
+        # Cap max_tokens at 8192 (Claude Sonnet 4.5 hard limit) regardless of
+        # state's larger request. Without this Bedrock truncates long sections
+        # (e.g. Introduction) mid-sentence, breaking the \begin/\end extractor.
+        _max_tokens = min(int(state['llm'].get('max_output_tokens') or 8192), 8192)
+        # boto3 defaults to 60s read_timeout — long Bedrock responses for full
+        # paper sections (8192 tokens) routinely take longer than that.
+        # CMBAGENT_BEDROCK_TIMEOUT env knob overrides; default 600s.
+        _read_timeout = int(os.getenv("CMBAGENT_BEDROCK_TIMEOUT", "600"))
+        boto_config = BotoConfig(read_timeout=_read_timeout, connect_timeout=30, retries={"max_attempts": 2})
+        state['llm']['llm'] = ChatBedrock(
+            model_id=bedrock_model_id,
+            region_name=state["keys"].AWS_REGION or "us-east-1",
+            aws_access_key_id=state["keys"].AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=state["keys"].AWS_SECRET_ACCESS_KEY,
+            config=boto_config,
+            model_kwargs={
+                "temperature": state['llm']['temperature'],
+                "max_tokens": _max_tokens,
+            },
+        )
+
+    elif 'gemini' in model_name:
         state['llm']['llm'] = ChatGoogleGenerativeAI(model=state['llm']['model'],
                                                 temperature=state['llm']['temperature'],
                                                 google_api_key=state["keys"].GEMINI)
 
-    elif any(key in state['llm']['model'] for key in ['gpt', 'o3']):
+    elif any(key in model_name for key in ['gpt', 'o3']):
         _openai_key = state["keys"].OPENAI
         _azure_key  = state["keys"].AZURE_OPENAI_API_KEY
         _azure_ep   = state["keys"].AZURE_OPENAI_ENDPOINT
@@ -50,8 +79,10 @@ def preprocess_node(state: GraphState, config: RunnableConfig):
                 "No OpenAI credentials found. Set OPENAI_API_KEY or "
                 "AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT."
             )
-                    
-    elif 'claude' in state['llm']['model']  or 'anthropic' in state['llm']['model'] :
+
+    elif 'claude' in model_name or 'anthropic' in model_name:
+        # Direct Anthropic API. If only AWS Bedrock creds are present, the
+        # caller should have set model_name to "bedrock/..." instead.
         state['llm']['llm'] = ChatAnthropic(model=state['llm']['model'],
                                             temperature=state['llm']['temperature'],
                                             anthropic_api_key=state["keys"].ANTHROPIC)

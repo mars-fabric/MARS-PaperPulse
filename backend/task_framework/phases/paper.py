@@ -115,10 +115,19 @@ class DeepresearchPaperPhase(Phase):
                 elif keys.ANTHROPIC:
                     llm_model = "claude-3-5-sonnet-20241022"
                     logger.info("GOOGLE_API_KEY not set — falling back to claude-3-5-sonnet")
+                elif keys.AWS_ACCESS_KEY_ID and keys.AWS_SECRET_ACCESS_KEY:
+                    # AWS Bedrock Claude via langchain-aws. The "bedrock/"
+                    # prefix is the routing signal for reader.py — it strips
+                    # the prefix before constructing ChatBedrock.
+                    llm_model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                    logger.info(
+                        "GOOGLE_API_KEY not set — falling back to AWS Bedrock claude-sonnet-4-5"
+                    )
                 else:
                     raise ValueError(
                         "No LLM credentials found. Set GOOGLE_API_KEY, OPENAI_API_KEY, "
-                        "AZURE_OPENAI_API_KEY, or ANTHROPIC_API_KEY."
+                        "AZURE_OPENAI_API_KEY, ANTHROPIC_API_KEY, or AWS_ACCESS_KEY_ID + "
+                        "AWS_SECRET_ACCESS_KEY (+ AWS_REGION)."
                     )
 
             # Auto-disable citations when no Perplexity key is available.

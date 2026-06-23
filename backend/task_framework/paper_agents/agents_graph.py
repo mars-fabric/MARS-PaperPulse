@@ -40,8 +40,12 @@ def build_graph(mermaid_diagram=False):
     builder.add_conditional_edges("refine_results", citation_router)
     builder.add_edge("citations_node",              END)
 
-    memory = MemorySaver()
-    graph  = builder.compile(checkpointer=memory)
+    # No checkpointer: ChatBedrock is not msgpack-serializable, which breaks
+    # MemorySaver's between-node state persistence. We don't actually need
+    # checkpoint resumption for paper-gen (it's a single end-to-end run), so
+    # compiling without a checkpointer is the right trade-off and lets every
+    # LangChain chat-model implementation (OpenAI / Anthropic / Bedrock) work.
+    graph = builder.compile()
 
     # # generate an scheme with the graph
     if mermaid_diagram:

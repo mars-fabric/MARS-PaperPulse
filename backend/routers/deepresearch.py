@@ -861,8 +861,20 @@ async def _run_planning_control_stage(
     )
 
     # ── 5. Extract results + save files ──
+    # Defensive: deep_research may return without running any steps (e.g. 0-step
+    # plan or restart_at_step beyond plan length). Ensure required keys exist.
+    if "chat_history" not in results:
+        results["chat_history"] = []
+    if "final_context" not in results:
+        results["final_context"] = {}
+
+    output_data: dict = {}
     if stage_num == 1:
-        research_idea = stage_helpers.extract_idea_result(results)
+        # Pass the stage work_dir so the extractor can fall back to the
+        # ideas_*.json that idea_saver writes when the chat_history returned
+        # by planning_and_control_context_carryover doesn't end on idea_maker.
+        idea_dir = os.path.join(work_dir, "idea_generation_output")
+        research_idea = stage_helpers.extract_idea_result(results, work_dir=idea_dir)
         idea_path = stage_helpers.save_idea(research_idea, work_dir)
         output_data = stage_helpers.build_idea_output(
             research_idea, data_description, idea_path, results["chat_history"],
@@ -883,6 +895,7 @@ async def _run_planning_control_stage(
             shared_state.get("research_idea", ""), data_description,
             shared_state.get("methodology", ""), experiment_results,
             final_plot_paths, results_path, plots_dir, results["chat_history"],
+            work_dir=work_dir,
         )
 
     # ── 6. Safety net: scan work_dir for cost files written to disk ──
@@ -947,7 +960,14 @@ async def _run_paper_stage(
     from cmbagent.config.model_registry import get_model_registry
 
     stage_defaults = get_model_registry().get_stage_defaults("deepresearch", 4)
-    config_kwargs = {"parent_run_id": task_id, **stage_defaults, **config_overrides}
+    # Strip empty/None UI selections so they don't clobber provider-profile
+    # defaults (frontend ModelSelect emits undefined for "use default", but
+    # be defensive in case a stray empty value slips through).
+    cleaned_overrides = {
+        k: v for k, v in (config_overrides or {}).items()
+        if v not in (None, "", [])
+    }
+    config_kwargs = {"parent_run_id": task_id, **stage_defaults, **cleaned_overrides}
     phase = DeepresearchPaperPhase(DeepresearchPaperPhaseConfig(**config_kwargs))
 
     context = PhaseContext(
@@ -1061,8 +1081,10 @@ async def get_stage_content(task_id: str, stage_num: int):
                 try:
                     from task_framework import stage_helpers
                     if stage_num == 1:
+                        idea_dir = os.path.join(work_dir, "idea_generation_output")
                         content = stage_helpers.extract_idea_result(
-                            {"chat_history": stage.output_data["chat_history"]}
+                            {"chat_history": stage.output_data["chat_history"]},
+                            work_dir=idea_dir,
                         )
                         # Repair: persist the recovered content back to DB and disk
                         if content and shared is not None and sdef["shared_key"]:

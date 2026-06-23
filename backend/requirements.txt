@@ -10,6 +10,7 @@ pydantic>=2.5.0,<3.0.0
 pydantic-settings>=2.5.0,<3.0.0
 structlog>=24.0.0
 python-dotenv>=1.0.0
+python-multipart>=0.0.9
 
 # HTTP clients
 aiohttp>=3.9.0
@@ -20,11 +21,35 @@ requests>=2.32.0
 pymupdf>=1.24.0
 pypdf>=4.0.0
 
+# Agent graph (paper_agents / langgraph_agents)
+langgraph>=0.2.0
+langchain-google-genai>=2.0.0
+langchain-openai>=0.1.0
+langchain-anthropic>=0.1.0
+# AWS Bedrock support for Stage 4 paper generation
+langchain-aws>=0.2.0
+
 # Credential encryption
 cryptography>=42.0.0
 
 # CMB Agent (LLM provider registry + orchestration)
-mars_cmbagent>=1.1.2
+# ─────────────────────────────────────────────────────────────────────────────
+# PaperPulse needs the [deepresearch] composite extra so the engineer agent
+# can execute Python locally (statsmodels, matplotlib, scipy, sklearn, ...).
+# Pin to PyPI (when 2.0.0 is published):
+#     mars_cmbagent[deepresearch]==2.0.0
+# Or, for local development against an editable checkout, run *after* this file:
+#     pip install -e /path/to/mars_cmbagent[deepresearch]
+# The line below is commented so pip doesn't try to fetch the old 1.1.x wheel.
+# mars_cmbagent[deepresearch]==2.0.0
+
+# Scientific stack safety-net: these come from mars_cmbagent[local,data] but
+# are pinned here too so a forgetful install order still gives the engineer
+# what it needs to actually run experiments instead of writing prose.
+statsmodels>=0.14.0
+matplotlib>=3.8.0
+scipy>=1.12.0
+scikit-learn>=1.4.0
 
 # Test dependencies
 pytest>=8.0.0

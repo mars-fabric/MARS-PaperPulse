@@ -1,5 +1,4 @@
 import re
-import sys
 import json
 import json5
 from pathlib import Path
@@ -188,6 +187,9 @@ def extract_latex_block(state: GraphState, text: str, block: str) -> str:
     \begin{block}
     TEXT
     \end{block}
+
+    Lenient with markdown code fences: Bedrock Claude often wraps LaTeX in
+    ```latex ... ``` blocks, so we strip those before matching.
     """
 
     # Check if the input 'text' is a list and convert it to a string
@@ -196,17 +198,42 @@ def extract_latex_block(state: GraphState, text: str, block: str) -> str:
         # Use str(item) to ensure all list elements can be joined
         text = "".join([str(item) for item in text])
 
+    # Strip ```latex fenced wrappers if present — Bedrock Claude tends to add
+    # them around LaTeX output even when the prompt asks for raw \begin{block}.
+    fence_match = re.search(r"```(?:latex|tex)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+    candidate = fence_match.group(1) if fence_match else text
+
     pattern = rf"\\begin{{{block}}}(.*?)\\end{{{block}}}"
-    match = re.search(pattern, text, re.DOTALL)
+    match = re.search(pattern, candidate, re.DOTALL) or re.search(pattern, text, re.DOTALL)
 
     if match:
         return match.group(1).strip()
-    
+
+    # Open-ended fallback: \begin{block} present but \end{block} missing.
+    # This happens when the LLM hit max_tokens mid-section (Claude Sonnet 4.5
+    # caps at 8192 output tokens, which a full Results section can exceed).
+    # Salvage everything after \begin{block} — better than failing the whole
+    # paper.
+    open_pattern = rf"\\begin{{{block}}}(.*)"
+    open_match = re.search(open_pattern, candidate, re.DOTALL) or re.search(open_pattern, text, re.DOTALL)
+    if open_match:
+        salvaged = open_match.group(1).strip()
+        # Trim trailing incomplete sentence if the cut happened mid-word.
+        if salvaged and not salvaged.endswith(('.', '!', '?', '}', ']')):
+            # Roll back to the last complete sentence so the LaTeX compiles.
+            last_sentence_end = max(
+                salvaged.rfind('.'), salvaged.rfind('!'), salvaged.rfind('?')
+            )
+            if last_sentence_end > 0:
+                salvaged = salvaged[:last_sentence_end + 1]
+        print(f"WARNING: {block} truncated — \\end{{{block}}} missing, salvaged {len(salvaged)} chars")
+        return salvaged
+
     # in case it fails
     with open(state['files']['Error'], 'w', encoding='utf-8') as f:
         f.write(text)
 
-    # try to fix it using fixed
+    # try to fix it using fixer
     try:
         return fixer(state, block)
     except ValueError:
@@ -216,27 +243,49 @@ def extract_latex_block(state: GraphState, text: str, block: str) -> str:
 
 def fixer(state: GraphState, section_name):
     """
-    This function will try to fix the errors with automatic parsing
+    This function will try to fix the errors with automatic parsing.
+
+    Lenient with code fences (Bedrock Claude often wraps in ```latex ... ```).
+    On terminal failure, raises ValueError instead of calling sys.exit() —
+    sys.exit() in a FastAPI worker kills the whole uvicorn process.
     """
 
     path = Path(state['files']['Error'])
     with path.open("r", encoding="utf-8") as f:
         Text = f.read()
-    
+
     PROMPT = fixer_prompt(Text, section_name)
     state, result = LLM_call(PROMPT, state)
     #result = llm.invoke(PROMPT).content
-    
+
+    # Strip ```latex code fences before matching (mirror extract_latex_block)
+    fence_match = re.search(r"```(?:latex|tex)?\s*\n?(.*?)\n?```", result, re.DOTALL)
+    candidate = fence_match.group(1) if fence_match else result
+
     # Extract caption
     pattern = rf"\\begin{{{section_name}}}(.*?)\\end{{{section_name}}}"
-    match = re.search(pattern, result, re.DOTALL)
+    match = re.search(pattern, candidate, re.DOTALL) or re.search(pattern, result, re.DOTALL)
     if match:
         return match.group(1).strip()
-    else:
-        with open(state['files']['Error'], 'w', encoding='utf-8') as f:
-            f.write(result)
-        print("Fixer failed to extract block")
-        sys.exit()
+
+    # Open-ended salvage: \begin present, \end missing (max_tokens cap hit).
+    open_pattern = rf"\\begin{{{section_name}}}(.*)"
+    open_match = re.search(open_pattern, candidate, re.DOTALL) or re.search(open_pattern, result, re.DOTALL)
+    if open_match:
+        salvaged = open_match.group(1).strip()
+        if salvaged and not salvaged.endswith(('.', '!', '?', '}', ']')):
+            last_sentence_end = max(
+                salvaged.rfind('.'), salvaged.rfind('!'), salvaged.rfind('?')
+            )
+            if last_sentence_end > 0:
+                salvaged = salvaged[:last_sentence_end + 1]
+        print(f"WARNING: fixer salvaged {section_name} ({len(salvaged)} chars) without \\end tag")
+        return salvaged
+
+    with open(state['files']['Error'], 'w', encoding='utf-8') as f:
+        f.write(result)
+    print("Fixer failed to extract block")
+    raise ValueError(f"Fixer could not extract \\begin{{{section_name}}}...\\end{{{section_name}}} block")
 
 
 

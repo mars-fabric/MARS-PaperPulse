@@ -10,7 +10,7 @@ import fitz  # PyMuPDF
 import cmbagent
 
 from .parameters import GraphState
-from .prompts import abstract_prompt, abstract_reflection, caption_prompt, clean_section_prompt, conclusions_prompt, introduction_prompt, introduction_reflection, keyword_prompt, methods_prompt, plot_prompt, references_prompt, refine_results_prompt, results_prompt, cmbagent_keywords_prompt
+from .prompts import abstract_prompt, abstract_reflection, caption_prompt, clean_section_prompt, conclusions_prompt, introduction_prompt, introduction_reflection, keyword_prompt, methods_prompt, plot_prompt, plot_append_prompt, references_prompt, refine_results_prompt, results_prompt, cmbagent_keywords_prompt
 from .tools import json_parser3, LaTeX_checker, clean_section, extract_latex_block, LLM_call, temp_file, check_images_in_text
 from .literature import process_tex_file_with_references
 from .latex import compile_latex, save_paper, save_bib, process_bib_file, compile_tex_document, fix_latex, fix_percent
@@ -272,6 +272,42 @@ def image_to_base64(image_path):
     return base64.b64encode(data).decode('utf-8')
 
 
+_LARGE_SECTION_THRESHOLD = 8000  # chars; beyond this we use append-only insertion
+
+
+def _build_figure_blocks(images: dict) -> str:
+    """Build LaTeX figure environments directly from the images dict.
+
+    Used as a last-resort fallback when the LLM cannot output the full
+    Results section (max-tokens hit) — builds minimal valid figure blocks
+    and appends them so all images are still referenced in the paper.
+    """
+    import re as _re
+    blocks = []
+    for key, info in images.items():
+        if isinstance(info, dict):
+            name = info.get('name', '')
+            caption = info.get('caption', name)
+        else:
+            # JSON may have stored Python repr strings; extract name with regex.
+            m = _re.search(r"'name'\s*:\s*'([^']+)'", str(info))
+            name = m.group(1) if m else str(info)
+            mc = _re.search(r"'caption'\s*:\s*'(.*?)'(?:\s*[,}])", str(info), _re.DOTALL)
+            caption = mc.group(1) if mc else name
+        if not name:
+            continue
+        label = _re.sub(r'[^a-zA-Z0-9]', '_', name)
+        blocks.append(
+            f"\\begin{{figure}}[htbp]\n"
+            f"    \\centering\n"
+            f"    \\includegraphics[width=0.5\\textwidth]{{../input_files/plots/{name}}}\n"
+            f"    \\caption{{{caption}}}\n"
+            f"    \\label{{fig:{label}}}\n"
+            f"\\end{{figure}}"
+        )
+    return "\n\n".join(blocks)
+
+
 def plots_node(state: GraphState, config: RunnableConfig):
     """
     This function deals with the plots generated, processing all files in batches of 7
@@ -325,31 +361,45 @@ def plots_node(state: GraphState, config: RunnableConfig):
             state['paper']['Results'] = temp_file(state, f_temp, 'read')
             
         else:
+            section_too_large = len(state['paper']['Results']) > _LARGE_SECTION_THRESHOLD
 
-            # sometimes it may not include the images. Give it three chances
-            for attempt in range(3):
-
-                print(f'{attempt} ', end="",flush=True)
-                
-                PROMPT = plot_prompt(state, images)
-                state, result = LLM_call(PROMPT, state)
-                results = extract_latex_block(state, result, "Section")
-
-                # Check LaTeX
-                results = LaTeX_checker(state, results)
-
-                # --- Remove unwanted LaTeX wrappers ---
-                state['paper']['Results'] = clean_section(results, 'Results')
-
-                # check if the names of the images are the correct ones
-                images_in_text = check_images_in_text(state, images)
-
-                if images_in_text:
-                    break
+            if section_too_large:
+                # Results section already exceeds the LLM output token budget —
+                # asking it to regenerate the full section would always truncate.
+                # Instead: ask the LLM to produce only the new figure blocks, then
+                # append them.  Three attempts; fall back to direct LaTeX build if all fail.
+                inserted = False
+                for attempt in range(3):
+                    print(f'{attempt} ', end="", flush=True)
+                    PROMPT = plot_append_prompt(state, images)
+                    state, result = LLM_call(PROMPT, state)
+                    figure_blocks = extract_latex_block(state, result, "Figures")
+                    figure_blocks = LaTeX_checker(state, figure_blocks)
+                    figure_blocks = clean_section(figure_blocks, 'Figures')
+                    if figure_blocks.strip():
+                        state['paper']['Results'] = state['paper']['Results'] + "\n\n" + figure_blocks
+                        inserted = True
+                        break
+                if not inserted:
+                    print(f"FALLBACK ", end="", flush=True)
+                    state['paper']['Results'] = state['paper']['Results'] + "\n\n" + _build_figure_blocks(images)
             else:
-                raise RuntimeError("Unable to put the images in the text. Failed after three attemps")
-                
-            
+                # Normal path: ask LLM to regenerate the full section with figures inserted.
+                for attempt in range(3):
+                    print(f'{attempt} ', end="",flush=True)
+                    PROMPT = plot_prompt(state, images)
+                    state, result = LLM_call(PROMPT, state)
+                    results = extract_latex_block(state, result, "Section")
+                    results = LaTeX_checker(state, results)
+                    state['paper']['Results'] = clean_section(results, 'Results')
+                    images_in_text = check_images_in_text(state, images)
+                    if images_in_text:
+                        break
+                else:
+                    # All 3 attempts failed — append figures directly rather than crash.
+                    print(f"FALLBACK ", end="", flush=True)
+                    state['paper']['Results'] = state['paper']['Results'] + "\n\n" + _build_figure_blocks(images)
+
             # save temporary file
             temp_file(state, f_temp, 'write', state['paper']['Results'])
 
@@ -403,21 +453,29 @@ def refine_results(state: GraphState, config: RunnableConfig):
     if f_temp.exists():
         state['paper']['Results'] = temp_file(state, f_temp, 'read')
 
+    elif len(state['paper']['Results']) > _LARGE_SECTION_THRESHOLD:
+        # Results section is too large for the LLM to regenerate intact — any
+        # refine attempt would overwrite the full section with a truncated
+        # version, losing figures we just appended.  Skip refinement, keep
+        # the section as-is, and save it directly.
+        print(f"SKIP (section>{_LARGE_SECTION_THRESHOLD}c) ", end="", flush=True)
+        temp_file(state, f_temp, 'write', state['paper']['Results'])
+
     else:
 
         # try for 3 times in case its fails
         for attempt in range(3):
 
             print(f'{attempt} ', end="",flush=True)
-        
+
             # Call the LLM to refine the results section
             PROMPT = refine_results_prompt(state)
             state, result = LLM_call(PROMPT, state)
             results = extract_latex_block(state, result, "Results")
-        
+
             # Check LaTeX
             results = LaTeX_checker(state, results)
-    
+
             # Remove unwanted LaTeX wrappers
             section_text = clean_section(results, 'Results')
 

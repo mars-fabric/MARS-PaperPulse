@@ -242,7 +242,7 @@ Follow these guidelines:
 
 def results_prompt(state):
 
-    return [SystemMessage(content="""You are a {state['writer']}"""),
+    return [SystemMessage(content=f"""You are a {state['writer']}"""),
             HumanMessage(content=rf"""Given the paper title, abstract, introduction, and short results below, write the results section for a scientific paper. Describe in detail the results obtained and try to intepret them
 
 Paper title: 
@@ -402,6 +402,36 @@ Respond in this format:
 \end{{Section}}
 
 In <Section>, put the new section with the images and their captions. The location of each image should be "../input_files/plots/image_name". Choose a label for each image given its caption. The width of the images should be half the page. Note that all text in <Section> should be compatible with LaTex. Make sure you do not put extra brackets at the end of the captions. The captions of the figures must be on a single paragraph. Do create enumerates or itemize inside the caption.
+""")]
+
+
+def plot_append_prompt(state, images):
+    """Used when the Results section is too large to regenerate in one call.
+    Ask the LLM to generate only the figure LaTeX blocks to append.
+    """
+    # Provide the last ~2000 chars of Results as context so the LLM knows what's there.
+    tail = state['paper']['Results'][-2000:] if len(state['paper']['Results']) > 2000 else state['paper']['Results']
+    return [SystemMessage(content=f"""You are a {state['writer']}"""),
+            HumanMessage(content=rf"""Your task is to write LaTeX figure environments for a set of images to be appended at the end of the Results section of a scientific paper.
+
+End of existing Results section (for context only — do NOT reproduce it):
+{tail}
+
+Images to insert:
+{images}
+
+Respond in this format:
+
+\begin{{Figures}}
+<Figures>
+\end{{Figures}}
+
+In <Figures>, write only the LaTeX \\begin{{figure}} ... \\end{{figure}} blocks for each image — nothing else. Do not reproduce any existing text. Rules:
+- Image path: ../input_files/plots/image_name
+- Width: 0.5\\textwidth
+- Each figure must have a \\caption{{}} and a \\label{{}}
+- Captions in a single paragraph, no itemize/enumerate inside captions
+- All text must be valid LaTeX
 """)]
 
 

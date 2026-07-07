@@ -11,7 +11,7 @@ import type { DeepresearchWizardStep } from '@/types/deepresearch'
 import SetupPanel from '@/components/deepresearch/SetupPanel'
 import ReviewPanel from '@/components/deepresearch/ReviewPanel'
 import ExecutionPanel from '@/components/deepresearch/ExecutionPanel'
-import PaperPanel from '@/components/deepresearch/PaperPanel'
+import ReportPanel from '@/components/deepresearch/ReportPanel'
 
 interface DeepresearchResearchTaskProps {
   onBack: () => void
@@ -212,9 +212,8 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
           />
         )}
         {currentStep === 4 && (
-          <PaperPanel
+          <ReportPanel
             hook={hook}
-            stageNum={4}
             onBack={goBack}
           />
         )}

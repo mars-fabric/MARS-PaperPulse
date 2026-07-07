@@ -21,6 +21,11 @@ requests>=2.32.0
 pymupdf>=1.24.0
 pypdf>=4.0.0
 
+# Stage 5 enhanced PDF report generation
+reportlab>=4.0.0        # programmatic A4 magazine-style PDF
+Pillow>=10.0.0          # gradient/image processing for cover & about pages
+numpy>=1.24.0           # gradient arrays (also required by matplotlib above)
+
 # Agent graph (paper_agents / langgraph_agents)
 langgraph>=0.2.0
 langchain-google-genai>=2.0.0
@@ -54,3 +59,4 @@ scikit-learn>=1.4.0
 # Test dependencies
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+mars_cmbagent>=2.2.0  

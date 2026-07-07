@@ -122,6 +122,10 @@ export default function StageAdvancedSettings({ stageNum, cfg, updateCfg }: Stag
         </>
       )}
 
+      {stageNum === 5 && (
+        <ModelSelect label="LLM Model" value={cfg.llm_model} defaultValue="gemini-2.5-flash" onChange={(v) => updateCfg({ llm_model: v || undefined })} models={availableModels} />
+      )}
+
       {stageNum === 4 && (
         <>
           <ModelSelect label="LLM Model" value={cfg.llm_model} defaultValue={d(4, 'llm_model', 'gemini-2.5-flash')} onChange={(v) => updateCfg({ llm_model: v || undefined })} models={availableModels} />

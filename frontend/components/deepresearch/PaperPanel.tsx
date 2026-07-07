@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useCallback, useState } from 'react'
-import { ArrowLeft, Download, FileText, Image, File, CheckCircle, Loader2, Play, Settings2, Eye, EyeOff, Pencil, X, Save, Wand2, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Download, FileText, Image, File, CheckCircle, Loader2, Play, Settings2, Eye, EyeOff, Pencil, X, Save, Wand2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/core'
 import ExecutionProgress from './ExecutionProgress'
 import StageAdvancedSettings from './StageAdvancedSettings'
@@ -13,12 +13,13 @@ interface PaperPanelProps {
   hook: ReturnType<typeof useDeepresearchTask>
   stageNum: number
   onBack: () => void
+  onNext?: () => void
 }
 
 type EditorMode = 'manual' | 'ai'
 type CompileState = 'idle' | 'compiling' | 'success' | 'error'
 
-export default function PaperPanel({ hook, stageNum, onBack }: PaperPanelProps) {
+export default function PaperPanel({ hook, stageNum, onBack, onNext }: PaperPanelProps) {
   const {
     taskId,
     taskState,
@@ -476,6 +477,12 @@ export default function PaperPanel({ hook, stageNum, onBack }: PaperPanelProps) 
 
       <div className="flex items-center justify-between pt-4">
         <Button onClick={onBack} variant="secondary" size="sm"><ArrowLeft className="w-4 h-4 mr-1" />Back</Button>
+        {onNext && (
+          <Button onClick={onNext} variant="primary" size="sm" disabled={!isCompleted}>
+            Next: Report
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Button>
+        )}
       </div>
     </div>
   )

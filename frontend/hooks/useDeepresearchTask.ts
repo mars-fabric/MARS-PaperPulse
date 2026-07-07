@@ -261,6 +261,9 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       config_overrides = Object.fromEntries(
         Object.entries(sharedCfg).filter(([, v]) => v !== undefined && v !== '')
       )
+    } else if (stageNum === 5) {
+      // Magazine report — no extra config supported
+      config_overrides = {}
     } else {
       // Stage 4 (paper) uses DeepresearchPaperPhaseConfig — only pass valid fields
       const paperKeys: Array<keyof DeepresearchStageConfig> = ['llm_model', 'writer', 'journal', 'add_citations']
@@ -536,7 +539,7 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
       for (const stage of state.stages) {
         if (stage.status === 'running') {
           // Stage is actively running - reconnect to listen for updates
-          resumeStep = stage.stage_number as DeepresearchWizardStep
+          resumeStep = Math.min(stage.stage_number, 4) as DeepresearchWizardStep
           setIsExecuting(true)
           connectWs(id, stage.stage_number)
           startPolling(id, stage.stage_number)
@@ -548,14 +551,14 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
           resumeStep = Math.min(stage.stage_number + 1, 4) as DeepresearchWizardStep
         } else if (stage.status === 'failed') {
           // Failed (could be interrupted by server restart) - land here with error shown
-          resumeStep = stage.stage_number as DeepresearchWizardStep
+          resumeStep = Math.min(stage.stage_number, 4) as DeepresearchWizardStep
           if (stage.error) {
             setError(stage.error)
           }
           break
         } else {
           // Pending - stop here
-          resumeStep = stage.stage_number as DeepresearchWizardStep
+          resumeStep = Math.min(stage.stage_number, 4) as DeepresearchWizardStep
           break
         }
       }

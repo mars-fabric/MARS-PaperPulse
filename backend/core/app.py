@@ -79,6 +79,23 @@ async def lifespan(app: FastAPI):
         log.warning("Credential sync failed on startup (non-fatal): %s", exc)
 
     _recover_stale_running_stages()
+
+    # Start background task for periodic event-queue cleanup (every 10 minutes)
+    import asyncio
+
+    async def _periodic_event_queue_cleanup():
+        try:
+            from event_queue import event_queue
+        except Exception:
+            return
+        while True:
+            await asyncio.sleep(600)
+            try:
+                event_queue.cleanup_all_old_events()
+            except Exception as _exc:
+                log.debug("Event queue cleanup error (non-fatal): %s", _exc)
+
+    asyncio.create_task(_periodic_event_queue_cleanup())
     yield
 
 

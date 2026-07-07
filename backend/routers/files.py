@@ -45,6 +45,10 @@ def _resolve_and_validate_path(path: str, must_exist: bool = True) -> str:
     if legacy_work_dir != work_dir:
         allowed_roots.append(legacy_work_dir)
 
+    
+    print("default_work_dir =", settings.default_work_dir)
+    print("resolved_work_dir =", work_dir)
+
     # Check that resolved path is within one of the allowed roots
     if not any(abs_path == root or abs_path.startswith(root + os.sep) for root in allowed_roots):
         raise HTTPException(
@@ -303,6 +307,27 @@ async def serve_image(path: str):
         raise HTTPException(status_code=500, detail=f"Error serving image: {str(e)}")
 
 
+@router.get("/info")
+async def file_info(path: str):
+    """Return file metadata (size, mime type) without reading content."""
+    try:
+        abs_path = _resolve_and_validate_path(path)
+        if not os.path.isfile(abs_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        stat = os.stat(abs_path)
+        return {
+            "path": abs_path,
+            "name": os.path.basename(abs_path),
+            "size": stat.st_size,
+            "modified": stat.st_mtime,
+            "mime_type": mimetypes.guess_type(abs_path)[0],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/serve")
 async def serve_file(path: str):
     """Serve a file inline with its proper MIME type (for browser viewing)."""
@@ -391,6 +416,7 @@ _UPLOAD_ALLOWED_EXTENSIONS = {
     '.csv', '.txt', '.md', '.json', '.fits', '.npy',
     '.h5', '.hdf5', '.dat', '.tsv', '.xlsx', '.xls',
     '.png', '.jpg', '.jpeg', '.pdf',
+    '.docx', '.doc',  # Word documents
 }
 
 

@@ -70,14 +70,14 @@ export interface UploadedFile {
 
 /** Wizard step mapping (0-indexed for Stepper) */
 export type DeepresearchWizardStep = 0 | 1 | 2 | 3 | 4
-// 0 = Setup, 1 = Idea Review, 2 = Method Review, 3 = Experiment, 4 = Paper
+// 0 = Setup, 1 = Idea Review, 2 = Method Review, 3 = Experiment, 4 = Report
 
 export const DEEPRESEARCH_STEP_LABELS = [
   'Setup',
   'Idea Generation',
   'Method Development',
   'Experiment',
-  'Paper',
+  'Report',
 ] as const
 
 /** Maps wizard step index to stage number (1-based) for API calls. Step 0 (setup) has no stage. */

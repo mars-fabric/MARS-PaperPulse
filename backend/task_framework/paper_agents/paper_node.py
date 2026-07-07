@@ -423,6 +423,11 @@ def plots_node(state: GraphState, config: RunnableConfig):
         minutes, seconds = divmod(time.time()-state['time']['start'], 60)
         print(f" |  done {state['tokens']['ti']} {state['tokens']['to']} [{int(minutes)}m {int(seconds)}s]")
     
+    # Always save the paper before compiling — if all batches were served from
+    # cache, save_paper() was never called inside the loop but preprocess_node
+    # deleted the old .tex file, so we must write it now.
+    save_paper(state, state['files']['Paper_v1'])
+
     # compile paper
     compile_latex(state, state['files']['Paper_v1'])
 
@@ -449,17 +454,17 @@ def refine_results(state: GraphState, config: RunnableConfig):
     print('Refining results'.ljust(33,'.'), end="", flush=True)
     f_temp = Path(f"{state['files']['Temp']}/Results_refined.tex")
 
-    # check if this has already been done
-    if f_temp.exists():
-        state['paper']['Results'] = temp_file(state, f_temp, 'read')
-
-    elif len(state['paper']['Results']) > _LARGE_SECTION_THRESHOLD:
-        # Results section is too large for the LLM to regenerate intact — any
-        # refine attempt would overwrite the full section with a truncated
-        # version, losing figures we just appended.  Skip refinement, keep
-        # the section as-is, and save it directly.
+    # For large sections, always skip LLM refinement — regenerating the full
+    # section would truncate it (max-token limit).  Write the current Results
+    # (which has all figures from plots_node) directly, overwriting any stale
+    # cached version that may have been saved by a previous failed run.
+    if len(state['paper']['Results']) > _LARGE_SECTION_THRESHOLD:
         print(f"SKIP (section>{_LARGE_SECTION_THRESHOLD}c) ", end="", flush=True)
         temp_file(state, f_temp, 'write', state['paper']['Results'])
+
+    # For normal-size sections, use cache if it exists (resume / checkpoint).
+    elif f_temp.exists():
+        state['paper']['Results'] = temp_file(state, f_temp, 'read')
 
     else:
 

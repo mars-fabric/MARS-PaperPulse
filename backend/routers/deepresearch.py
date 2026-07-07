@@ -51,6 +51,7 @@ STAGE_DEFS = [
     {"number": 2, "name": "method_development", "shared_key": "methodology", "file": "methods.md"},
     {"number": 3, "name": "experiment_execution", "shared_key": "results", "file": "results.md"},
     {"number": 4, "name": "paper_generation", "shared_key": None, "file": None},
+    {"number": 5, "name": "report_generation", "shared_key": None, "file": None},
 ]
 
 
@@ -222,6 +223,37 @@ def _build_file_context(work_dir: str) -> str:
                     lines.append("**Preview (first 15 lines):**")
                     lines.append("```")
                     lines.extend(preview_lines)
+                    lines.append("```\n")
+            except Exception:
+                pass
+        elif ext in {'.xlsx', '.xls'} and size < 10 * 1024 * 1024:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+                ws = wb.active
+                preview_rows = []
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 10:
+                        preview_rows.append("... (truncated)")
+                        break
+                    preview_rows.append("\t".join(str(c) if c is not None else "" for c in list(row)[:10]))
+                wb.close()
+                if preview_rows:
+                    lines.append(f"**Preview (sheet: {ws.title}, first 10 rows):**")
+                    lines.append("```")
+                    lines.extend(preview_rows)
+                    lines.append("```\n")
+            except Exception:
+                pass
+        elif ext == '.docx' and size < 10 * 1024 * 1024:
+            try:
+                import docx as _docx
+                doc = _docx.Document(path)
+                paras = [p.text.strip() for p in doc.paragraphs if p.text.strip()][:15]
+                if paras:
+                    lines.append("**Preview (first paragraphs):**")
+                    lines.append("```")
+                    lines.extend(paras)
                     lines.append("```\n")
             except Exception:
                 pass
@@ -483,8 +515,8 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
     Runs the phase asynchronously in the background. Connect to
     the WebSocket /ws/deepresearch/{task_id}/{stage_num} for streaming output.
     """
-    if stage_num < 1 or stage_num > 4:
-        raise HTTPException(status_code=400, detail="stage_num must be 1-4")
+    if stage_num < 1 or stage_num > 5:
+        raise HTTPException(status_code=400, detail="stage_num must be 1-5")
 
     # Check not already running
     bg_key = f"{task_id}:{stage_num}"
@@ -628,11 +660,25 @@ async def _run_phase(
                 task_id, stage_num, sdef, buf_key,
                 task_description, work_dir, shared_state, config_overrides,
             )
-        else:
+        elif stage_num == 4:
             await _run_paper_stage(
                 task_id, stage_num, sdef, buf_key,
                 task_description, work_dir, shared_state, config_overrides,
             )
+        else:  # stage_num == 5
+            pipeline_choice = (config_overrides or {}).get("pipeline_choice", "report")
+            if pipeline_choice == "paper":
+                # User chose: run the classic academic paper pipeline
+                await _run_paper_stage(
+                    task_id, stage_num, sdef, buf_key,
+                    task_description, work_dir, shared_state, config_overrides,
+                )
+            else:
+                # User chose: run the new enhanced magazine-style PDF pipeline
+                await _run_report_stage(
+                    task_id, stage_num, sdef, buf_key,
+                    task_description, work_dir, shared_state, config_overrides,
+                )
     except Exception as e:
         logger.error("deepresearch_phase_exception task=%s stage=%d error=%s", task_id, stage_num, e, exc_info=True)
         with _console_lock:
@@ -1041,6 +1087,180 @@ async def _run_paper_stage(
         db.close()
 
 
+async def _run_report_stage(
+    task_id: str,
+    stage_num: int,
+    sdef: dict,
+    buf_key: str,
+    task_description: str,
+    work_dir: str,
+    shared_state: Dict[str, Any],
+    config_overrides: Dict[str, Any],
+):
+    """Run stage 5 (enhanced PDF report) using the report_agents LangGraph."""
+    from task_framework.phases.report import DeepresearchReportPhase, DeepresearchReportPhaseConfig
+    from cmbagent.phases.base import PhaseContext, PhaseStatus
+
+    cleaned_overrides = {
+        k: v for k, v in (config_overrides or {}).items()
+        if v not in (None, "", []) and k != "pipeline_choice"
+    }
+
+    # Provide sensible defaults for Stage 5 (no model-registry entry required)
+    config_kwargs = {
+        "parent_run_id": task_id,
+        "llm_model": "gemini-2.5-flash",
+        "llm_temperature": 0.7,
+        "llm_max_output_tokens": 8192,
+        **cleaned_overrides,
+    }
+
+    phase = DeepresearchReportPhase(DeepresearchReportPhaseConfig(**config_kwargs))
+
+    context = PhaseContext(
+        workflow_id=f"deepresearch-{task_id}",
+        run_id=task_id,
+        phase_id=f"stage-{stage_num}",
+        task=task_description,
+        work_dir=work_dir,
+        shared_state=shared_state,
+        api_keys={},
+        callbacks=None,
+    )
+
+    with _console_lock:
+        _console_buffers.setdefault(buf_key, []).append(
+            "Enhanced report generation initialized, executing..."
+        )
+
+    _install_console_capture()
+    _active_buf_key.set(buf_key)
+
+    try:
+        result = await phase.execute(context)
+    finally:
+        _active_buf_key.set(None)
+
+    # Persist result to DB (mirrors _run_paper_stage)
+    db = _get_db()
+    try:
+        sid = _get_session_id_for_task(task_id, db)
+        repo = _get_stage_repo(db, session_id=sid)
+        stages = repo.list_stages(parent_run_id=task_id)
+        stage = next((s for s in stages if s.stage_number == stage_num), None)
+        if stage:
+            if result.status == PhaseStatus.COMPLETED:
+                repo.update_stage_status(
+                    stage.id,
+                    "completed",
+                    output_data=result.context.output_data,
+                    output_files=list((result.context.output_data or {}).get("artifacts", {}).values()),
+                )
+                logger.info("deepresearch_report_completed task=%s stage=%d", task_id, stage_num)
+                with _console_lock:
+                    _console_buffers.setdefault(buf_key, []).append(
+                        f"Stage {stage_num} ({sdef['name']}) completed successfully."
+                    )
+                refreshed = repo.list_stages(parent_run_id=task_id)
+                if all(s.status == "completed" for s in refreshed):
+                    from cmbagent.database.models import WorkflowRun as _WR2
+                    parent = db.query(_WR2).filter(_WR2.id == task_id).first()
+                    if parent:
+                        parent.status = "completed"
+            else:
+                repo.update_stage_status(
+                    stage.id, "failed",
+                    error_message=result.error or "Report phase failed",
+                )
+                logger.error("deepresearch_report_failed task=%s stage=%d error=%s",
+                             task_id, stage_num, result.error)
+                with _console_lock:
+                    _console_buffers.setdefault(buf_key, []).append(
+                        f"Stage {stage_num} failed: {result.error}"
+                    )
+        db.commit()
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def _collect_stage_output_files(
+    work_dir: str,
+    raw_files: List[str],
+    output_data: Dict[str, Any],
+) -> List[str]:
+    """Collect stage output files from explicitly stored paths and output_data."""
+    normalized_files: List[str] = []
+    seen: set[str] = set()
+
+    def add_file(path: str) -> None:
+        if not path:
+            return
+        candidates = []
+        if os.path.isabs(path):
+            candidates.append(path)
+        else:
+            candidates.append(os.path.join(work_dir, path))
+            candidates.append(os.path.abspath(path))
+            candidates.append(os.path.realpath(path))
+
+        for candidate in candidates:
+            candidate = os.path.realpath(candidate)
+            if candidate in seen:
+                return
+            if os.path.isfile(candidate):
+                seen.add(candidate)
+                normalized_files.append(candidate)
+                return
+
+    def add_dir(path: str) -> None:
+        if not path:
+            return
+        if not os.path.isabs(path):
+            path = os.path.join(work_dir, path)
+        path = os.path.realpath(path)
+        if not os.path.isdir(path):
+            return
+        for fname in sorted(os.listdir(path)):
+            if fname.endswith(('.tex', '.pdf')):
+                add_file(os.path.join(path, fname))
+
+    for f in raw_files:
+        if not isinstance(f, str):
+            continue
+        if os.path.isdir(f) or os.path.isdir(os.path.join(work_dir, f)):
+            add_dir(f)
+        else:
+            add_file(f)
+
+    artifacts = output_data.get('artifacts', {}) or {}
+    if isinstance(artifacts, dict):
+        for value in artifacts.values():
+            if isinstance(value, str):
+                if os.path.isdir(value) or os.path.isdir(os.path.join(work_dir, value)):
+                    add_dir(value)
+                else:
+                    add_file(value)
+
+    shared = output_data.get('shared', {}) or {}
+    if isinstance(shared, dict):
+        report_pdf = shared.get('report_pdf')
+        if isinstance(report_pdf, str):
+            add_file(report_pdf)
+        report_dir = shared.get('report_dir')
+        if isinstance(report_dir, str):
+            add_dir(report_dir)
+        # Support alternate keys for legacy workflows
+        pdf_path = shared.get('pdf_path')
+        if isinstance(pdf_path, str):
+            add_file(pdf_path)
+
+    return normalized_files
+
+
 # =============================================================================
 # GET /api/deepresearch/{task_id}/stages/{num}/content
 # =============================================================================
@@ -1101,18 +1321,9 @@ async def get_stage_content(task_id: str, stage_num: int):
                     logger.warning("deepresearch_content_recovery_failed task=%s stage=%d error=%s",
                                    task_id, stage_num, exc)
 
-        # Sanitize output_files: expand any directory entries to their actual files
-        # (handles old tasks whose artifacts dict included 'paper/': <dir>)
-        raw_files = stage.output_files or []
-        sanitized_files = []
-        for f in raw_files:
-            if f and os.path.isfile(f):
-                sanitized_files.append(f)
-            elif f and os.path.isdir(f):
-                # Expand directory: include .tex and .pdf files
-                for fname in sorted(os.listdir(f)):
-                    if fname.endswith(('.tex', '.pdf')):
-                        sanitized_files.append(os.path.join(f, fname))
+        from cmbagent.database.models import WorkflowRun
+        parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
+        work_dir = (parent.meta or {}).get("work_dir", _get_work_dir(task_id)) if parent else _get_work_dir(task_id)
 
         return DeepresearchStageContentResponse(
             stage_number=stage.stage_number,
@@ -1120,7 +1331,11 @@ async def get_stage_content(task_id: str, stage_num: int):
             status=stage.status,
             content=content,
             shared_state=shared,
-            output_files=sanitized_files,
+            output_files=_collect_stage_output_files(
+                work_dir=work_dir,
+                raw_files=stage.output_files or [],
+                output_data=stage.output_data or {},
+            ),
         )
     finally:
         db.close()
@@ -1137,8 +1352,8 @@ async def update_stage_content(task_id: str, stage_num: int, request: Deepresear
     Updates both the markdown file on disk and the output_data['shared']
     in the database so the next stage reads the edited version.
     """
-    if stage_num < 1 or stage_num > 4:
-        raise HTTPException(status_code=400, detail="stage_num must be 1-4")
+    if stage_num < 1 or stage_num > 5:
+        raise HTTPException(status_code=400, detail="stage_num must be 1-5")
 
     sdef = STAGE_DEFS[stage_num - 1]
 
@@ -1230,7 +1445,10 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
             )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = await asyncio.get_running_loop().run_in_executor(executor, _run)
+            result = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(executor, _run),
+                timeout=120,
+            )
 
         edits_applied = len(result.applied)
         edits_failed = len(result.failed)
@@ -1250,6 +1468,9 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
             edits_applied=edits_applied,
             edits_failed=edits_failed,
         )
+    except asyncio.TimeoutError:
+        logger.error("deepresearch_refine_timeout task=%s stage=%d", task_id, stage_num)
+        raise HTTPException(status_code=504, detail="Refinement timed out (120s). Try a shorter request.")
     except Exception as e:
         logger.error("deepresearch_refine_failed error=%s", e)
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
@@ -1971,9 +2192,15 @@ async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
             )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            edited = await asyncio.get_running_loop().run_in_executor(executor, _call_llm)
+            edited = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(executor, _call_llm),
+                timeout=120,
+            )
 
         return AiEditTexResponse(edited_content=edited or original)
+    except asyncio.TimeoutError:
+        logger.error("deepresearch_ai_edit_tex_timeout task=%s", task_id)
+        raise HTTPException(status_code=504, detail="AI edit timed out (120s). Try a shorter document.")
     except Exception as e:
         logger.error("deepresearch_ai_edit_tex_failed task=%s error=%s", task_id, e)
         raise HTTPException(status_code=500, detail=f"AI edit failed: {e}")

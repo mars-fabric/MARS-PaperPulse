@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Play, Timer, DollarSign, Settings2 } from 'lucid
 import { Button } from '@/components/core'
 import ExecutionProgress from './ExecutionProgress'
 import StageAdvancedSettings from './StageAdvancedSettings'
+import StageArtifactsPanel from './StageArtifactsPanel'
 import type { useDeepresearchTask } from '@/hooks/useDeepresearchTask'
 import type { DeepresearchStageConfig } from '@/types/deepresearch'
 
@@ -24,16 +25,19 @@ export default function ExecutionPanel({
   onBack,
 }: ExecutionPanelProps) {
   const {
+    taskId,
     taskState,
     consoleOutput,
     isExecuting,
     executeStage,
+    fetchStageContent,
     taskConfig,
     setTaskConfig,
   } = hook
 
   const [elapsed, setElapsed] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
+  const [artifacts, setArtifacts] = useState<string[]>([])
 
   const updateCfg = useCallback((patch: Partial<DeepresearchStageConfig>) => {
     setTaskConfig({ ...taskConfig, ...patch })
@@ -45,6 +49,15 @@ export default function ExecutionPanel({
   const isNotStarted = stage?.status === 'pending'
 
   // (stage is started manually via the Run button in the pre-execution UI)
+
+  // Load artifacts when stage completes
+  useEffect(() => {
+    if (isCompleted && taskId) {
+      fetchStageContent(stageNum).then(content => {
+        if (content?.output_files) setArtifacts(content.output_files)
+      })
+    }
+  }, [isCompleted, taskId, fetchStageContent, stageNum])
 
   // Timer — reset to 0 when execution starts, then tick every second
   useEffect(() => {
@@ -187,6 +200,16 @@ export default function ExecutionPanel({
             </div>
           )}
         </div>
+      )}
+
+      {/* Artifacts panel (when completed) */}
+      {isCompleted && artifacts.length > 0 && (
+        <StageArtifactsPanel
+          title={`${stageName} Artifacts`}
+          files={artifacts}
+          onRefresh={() => fetchStageContent(stageNum).then(c => { if (c?.output_files) setArtifacts(c.output_files) })}
+          taskId={taskId}
+        />
       )}
 
       {/* Navigation */}

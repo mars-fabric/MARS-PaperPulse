@@ -60,3 +60,4 @@ scikit-learn>=1.4.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 mars_cmbagent>=2.2.0  
+sqlalchemy

@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
 const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const envAllowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowedDevOrigins = Array.from(new Set(['localhost', '127.0.0.1', ...envAllowedDevOrigins]));
 
 const nextConfig = {
   // Disable strict mode to prevent double-render in dev (a common lag source)
@@ -9,10 +14,8 @@ const nextConfig = {
   // Disable the "X-Powered-By" header
   poweredByHeader: false,
 
-  // Allow external hosts in development (configured via env var)
-  ...(process.env.ALLOWED_DEV_ORIGINS
-    ? { allowedDevOrigins: process.env.ALLOWED_DEV_ORIGINS.split(',') }
-    : {}),
+  // Allow common local hosts plus optional env-provided hosts in development.
+  allowedDevOrigins,
 
   // Explicitly set turbopack root to avoid conflicts with multiple lockfiles
   turbopack: {

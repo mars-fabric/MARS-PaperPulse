@@ -454,7 +454,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     setCurrentRunId(taskId);
     shouldReconnect.current = true;
 
-    const wsUrl = getWsUrl(`/ws/${taskId}`);
+    // Backend exposes only stage-scoped WS routes in Deepresearch mode.
+    const wsUrl = getWsUrl(`/ws/deepresearch/${taskId}/1`);
     debugLog(`[WebSocket] Connecting to ${wsUrl}...`);
 
     return new Promise<void>((resolve, reject) => {

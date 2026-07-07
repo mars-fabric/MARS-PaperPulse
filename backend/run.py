@@ -22,7 +22,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting CMBAgent Backend Server")
     port = int(os.getenv("PORT", 8000))
-    logger.info("Server: http://localhost:%d | WebSocket: ws://localhost:%d/ws/{task_id} | Docs: http://localhost:%d/docs", port, port, port)
+    logger.info("Server: http://localhost:%d | WebSocket: ws://localhost:%d/ws/deepresearch/{task_id}/{stage_num} | Docs: http://localhost:%d/docs", port, port, port)
 
     # Get log directory from environment or use default
     work_dir = os.getenv("CMBAGENT_DEFAULT_WORK_DIR", "~/Desktop/cmbdir")

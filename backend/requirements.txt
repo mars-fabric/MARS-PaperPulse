@@ -41,12 +41,10 @@ cryptography>=42.0.0
 # ─────────────────────────────────────────────────────────────────────────────
 # PaperPulse needs the [deepresearch] composite extra so the engineer agent
 # can execute Python locally (statsmodels, matplotlib, scipy, sklearn, ...).
-# Pin to PyPI (when 2.0.0 is published):
-#     mars_cmbagent[deepresearch]==2.0.0
-# Or, for local development against an editable checkout, run *after* this file:
-#     pip install -e /path/to/mars_cmbagent[deepresearch]
-# The line below is commented so pip doesn't try to fetch the old 1.1.x wheel.
-# mars_cmbagent[deepresearch]==2.0.0
+# For local development (editable install from checkout):
+# -e /home/sachin_mourya/Desktop/mars_cmbagent[all]
+# For PyPI release (uncomment when published, comment the -e line above):
+mars_cmbagent[all]>=2.2.1
 
 # Scientific stack safety-net: these come from mars_cmbagent[local,data] but
 # are pinned here too so a forgetful install order still gives the engineer
@@ -59,5 +57,7 @@ scikit-learn>=1.4.0
 # Test dependencies
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
-mars_cmbagent>=2.2.0  
+mars_cmbagent>=2.2.1
 sqlalchemy
+langchain
+langchain_community

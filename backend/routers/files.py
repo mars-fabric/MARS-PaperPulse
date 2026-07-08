@@ -45,10 +45,6 @@ def _resolve_and_validate_path(path: str, must_exist: bool = True) -> str:
     if legacy_work_dir != work_dir:
         allowed_roots.append(legacy_work_dir)
 
-    
-    print("default_work_dir =", settings.default_work_dir)
-    print("resolved_work_dir =", work_dir)
-
     # Check that resolved path is within one of the allowed roots
     if not any(abs_path == root or abs_path.startswith(root + os.sep) for root in allowed_roots):
         raise HTTPException(

@@ -44,7 +44,7 @@ cryptography>=42.0.0
 # For local development (editable install from checkout):
 # -e /home/sachin_mourya/Desktop/mars_cmbagent[all]
 # For PyPI release (uncomment when published, comment the -e line above):
-mars_cmbagent[all]>=2.2.1
+mars_cmbagent[all]>=2.2.2
 
 # Scientific stack safety-net: these come from mars_cmbagent[local,data] but
 # are pinned here too so a forgetful install order still gives the engineer
@@ -57,7 +57,6 @@ scikit-learn>=1.4.0
 # Test dependencies
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
-mars_cmbagent>=2.2.1
 sqlalchemy
 langchain
 langchain_community

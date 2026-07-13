@@ -1,0 +1,29 @@
+# Keep build context small and avoid baking secrets / local state into images.
+
+# Python
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Local state & work dirs
+**/.cmbdir/
+**/cmbdir/
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.log
+
+# Secrets (pass at runtime via --env-file / -e instead)
+**/.env
+**/.env.local
+**/.env.*.local
+
+# VCS / editor
+.git/
+.gitignore
+**/.DS_Store

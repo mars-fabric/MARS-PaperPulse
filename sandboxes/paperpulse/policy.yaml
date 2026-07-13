@@ -1,0 +1,135 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 MARS Research. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1
+
+# --- Sandbox setup configuration (queried once at startup) ---
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /app          # PaperPulse code — immutable at runtime
+    - /etc
+    - /var/log
+  read_write:
+    - /sandbox      # venv, work dir, SQLite DB, logs, task outputs
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+# --- Network policies (queried per-CONNECT request) ---
+#
+# The PaperPulse backend reaches out from the venv Python interpreter (LLM SDKs
+# use httpx/requests), so egress is bound to that binary. Enable only the
+# providers you actually use; comment the rest to keep the blast radius small.
+
+network_policies:
+  # OpenAI
+  openai:
+    name: openai
+    endpoints:
+      - { host: api.openai.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # Anthropic Claude
+  anthropic:
+    name: anthropic
+    endpoints:
+      - { host: api.anthropic.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # Google Gemini (AI Studio + Vertex)
+  gemini:
+    name: gemini
+    endpoints:
+      - { host: generativelanguage.googleapis.com, port: 443 }
+      - { host: "*-aiplatform.googleapis.com", port: 443 }
+      - { host: oauth2.googleapis.com, port: 443 }
+      - { host: www.googleapis.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # Mistral
+  mistral:
+    name: mistral
+    endpoints:
+      - { host: api.mistral.ai, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # Azure OpenAI — host is YOUR resource (the domain in AZURE_OPENAI_ENDPOINT,
+  # without https:// or the trailing slash). Host matching is exact (no glob).
+  # Uncomment and replace YOUR-RESOURCE:
+  azure_openai:
+    name: azure-openai
+    endpoints:
+      - { host: azureft.openai.azure.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # AWS Bedrock — hosts are region-specific. Replace us-east-1 with your
+  # AWS_DEFAULT_REGION. Uncomment:
+  # bedrock:
+  #   name: bedrock
+  #   endpoints:
+  #     - { host: bedrock-runtime.us-east-1.amazonaws.com, port: 443 }  # model inference
+  #     - { host: bedrock.us-east-1.amazonaws.com, port: 443 }          # list/describe models
+  #     # - { host: sts.us-east-1.amazonaws.com, port: 443 }            # only with AWS_SESSION_TOKEN / assumed roles
+  #   binaries:
+  #     - { path: /sandbox/.venv/bin/python }
+  #     - { path: /sandbox/.venv/bin/python3 }
+
+  # tiktoken token-encoding assets (BPE files). The OpenAI/Azure client uses
+  # tiktoken for token counting and downloads encodings from this CDN on first
+  # use. Needed by both the openai and azure providers.
+  openai_assets:
+    name: openai-assets
+    endpoints:
+      - { host: openaipublic.blob.core.windows.net, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # PyPI — lets the engineer agent install extra packages at runtime.
+  # Remove this policy if you want to forbid all runtime installs.
+  pypi:
+    name: pypi
+    endpoints:
+      - { host: pypi.org, port: 443 }
+      - { host: files.pythonhosted.org, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+      - { path: /sandbox/.venv/bin/pip }
+      - { path: /usr/local/bin/uv }

@@ -8,6 +8,10 @@ const envAllowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS || '')
 const allowedDevOrigins = Array.from(new Set(['localhost', '127.0.0.1', ...envAllowedDevOrigins]));
 
 const nextConfig = {
+  // Emit a self-contained server bundle (.next/standalone/server.js) so the app
+  // can run from a read-only /app filesystem inside the OpenShell sandbox.
+  output: 'standalone',
+
   // Disable strict mode to prevent double-render in dev (a common lag source)
   reactStrictMode: false,
 

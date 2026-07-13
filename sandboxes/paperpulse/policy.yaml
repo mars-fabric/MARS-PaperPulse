@@ -81,6 +81,19 @@ network_policies:
       - { path: /sandbox/.venv/bin/python }
       - { path: /sandbox/.venv/bin/python3 }
 
+  # NVIDIA NIM (Nemotron; OpenAI-compatible). Default endpoint is the hosted
+  # build.nvidia.com gateway. If NVIDIA_BASE_URL points elsewhere, replace the
+  # host below with that domain (exact match, no glob).
+  nvidia:
+    name: nvidia
+    endpoints:
+      - { host: integrate.api.nvidia.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
   # Azure OpenAI — host is YOUR resource (the domain in AZURE_OPENAI_ENDPOINT,
   # without https:// or the trailing slash). Host matching is exact (no glob).
   # Uncomment and replace YOUR-RESOURCE:

@@ -15,6 +15,8 @@ class KeyManager(BaseModel):
     AWS_ACCESS_KEY_ID: str | None = ""
     AWS_SECRET_ACCESS_KEY: str | None = ""
     AWS_REGION: str | None = ""
+    NVIDIA: str | None = ""
+    NVIDIA_BASE_URL: str | None = ""
 
     def get_keys_from_env(self) -> None:
 
@@ -32,6 +34,8 @@ class KeyManager(BaseModel):
         self.AWS_ACCESS_KEY_ID      = os.getenv("AWS_ACCESS_KEY_ID")
         self.AWS_SECRET_ACCESS_KEY  = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.AWS_REGION             = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+        self.NVIDIA                 = os.getenv("NVIDIA_API_KEY")
+        self.NVIDIA_BASE_URL        = os.getenv("NVIDIA_BASE_URL") or "https://integrate.api.nvidia.com/v1"
 
     def __getitem__(self, key: str) -> str:
         return getattr(self, key)

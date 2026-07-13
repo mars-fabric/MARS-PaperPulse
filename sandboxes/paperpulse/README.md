@@ -229,8 +229,10 @@ docker exec "$C" tail -n 40 /sandbox/cmbdir/logs/backend.log
 
 ## 9. Other providers
 
-`policy.yaml` ships with OpenAI, Anthropic, Gemini, Mistral, Azure and the tiktoken
-asset host enabled, and PyPI open for runtime installs. **Azure and AWS Bedrock hosts
+`policy.yaml` ships with OpenAI, Anthropic, Gemini, Mistral, NVIDIA NIM, Azure and the
+tiktoken asset host enabled, and PyPI open for runtime installs. NVIDIA NIM defaults to
+`integrate.api.nvidia.com`; if `NVIDIA_BASE_URL` points elsewhere, update that host.
+**Azure and AWS Bedrock hosts
 are account/region-specific** — Azure is set to `azureft.openai.azure.com`; for
 Bedrock, uncomment the block and set `bedrock-runtime.<region>.amazonaws.com`. After
 editing `policy.yaml`, just recreate the sandbox (no rebuild).

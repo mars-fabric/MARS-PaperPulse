@@ -78,8 +78,20 @@ class DeepresearchReportPhase(Phase):
 
             # Auto-select LLM model based on available credentials
             llm_model = self.config.llm_model
+            # If NVIDIA is the active provider (or the only credential present),
+            # use Nemotron for Stage 5 too so the whole pipeline is consistent.
+            active_provider = os.getenv("CMBAGENT_LLM_PROVIDER", "").strip().lower()
+            nvidia_key = getattr(keys, "NVIDIA", None)
+            if active_provider == "nvidia" and nvidia_key:
+                llm_model = os.getenv(
+                    "CMBAGENT_NVIDIA_DEFAULT_MODEL", "nvidia/nemotron-3-super-120b-a12b"
+                )
             if "gemini" in llm_model and not getattr(keys, "GEMINI", None):
-                if getattr(keys, "OPENAI", None):
+                if nvidia_key:
+                    llm_model = os.getenv(
+                        "CMBAGENT_NVIDIA_DEFAULT_MODEL", "nvidia/nemotron-3-super-120b-a12b"
+                    )
+                elif getattr(keys, "OPENAI", None):
                     llm_model = "gpt-4o"
                 elif getattr(keys, "AZURE_OPENAI_API_KEY", None):
                     llm_model = "gpt-4o"
@@ -90,7 +102,7 @@ class DeepresearchReportPhase(Phase):
                 else:
                     raise ValueError(
                         "No LLM credentials found. Set GOOGLE_API_KEY, OPENAI_API_KEY, "
-                        "ANTHROPIC_API_KEY, or AWS credentials."
+                        "ANTHROPIC_API_KEY, NVIDIA_API_KEY, or AWS credentials."
                     )
 
             manager.start_step(1, "Generating enhanced report PDF")

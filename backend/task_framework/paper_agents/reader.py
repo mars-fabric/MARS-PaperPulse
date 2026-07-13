@@ -53,6 +53,17 @@ def preprocess_node(state: GraphState, config: RunnableConfig):
                                                 temperature=state['llm']['temperature'],
                                                 google_api_key=state["keys"].GEMINI)
 
+    elif model_name.startswith('nvidia/') or 'nemotron' in model_name.lower():
+        # NVIDIA NIM is OpenAI-compatible — route through ChatOpenAI with the
+        # NVIDIA base_url and NVIDIA_API_KEY.
+        _nvidia_base = getattr(state["keys"], "NVIDIA_BASE_URL", None) or "https://integrate.api.nvidia.com/v1"
+        state['llm']['llm'] = ChatOpenAI(
+            model=state['llm']['model'],
+            temperature=state['llm']['temperature'],
+            openai_api_key=getattr(state["keys"], "NVIDIA", None),
+            base_url=_nvidia_base,
+        )
+
     elif any(key in model_name for key in ['gpt', 'o3']):
         _openai_key = state["keys"].OPENAI
         _azure_key  = state["keys"].AZURE_OPENAI_API_KEY

@@ -105,8 +105,21 @@ class DeepresearchPaperPhase(Phase):
             # Auto-select LLM model based on available credentials when the
             # configured model can't be satisfied.
             llm_model = self.config.llm_model
+            # If NVIDIA is the active provider (or the only credential present),
+            # use Nemotron for the paper stage too so the pipeline is consistent.
+            active_provider = os.getenv("CMBAGENT_LLM_PROVIDER", "").strip().lower()
+            nvidia_key = getattr(keys, "NVIDIA", None)
+            if active_provider == "nvidia" and nvidia_key:
+                llm_model = os.getenv(
+                    "CMBAGENT_NVIDIA_DEFAULT_MODEL", "nvidia/nemotron-3-super-120b-a12b"
+                )
             if "gemini" in llm_model and not keys.GEMINI:
-                if keys.OPENAI:
+                if nvidia_key:
+                    llm_model = os.getenv(
+                        "CMBAGENT_NVIDIA_DEFAULT_MODEL", "nvidia/nemotron-3-super-120b-a12b"
+                    )
+                    logger.info("GOOGLE_API_KEY not set — falling back to NVIDIA Nemotron")
+                elif keys.OPENAI:
                     llm_model = "gpt-4o"
                     logger.info("GOOGLE_API_KEY not set — falling back to gpt-4o")
                 elif keys.AZURE_OPENAI_API_KEY and keys.AZURE_OPENAI_ENDPOINT and keys.AZURE_OPENAI_DEPLOYMENT:
@@ -126,8 +139,8 @@ class DeepresearchPaperPhase(Phase):
                 else:
                     raise ValueError(
                         "No LLM credentials found. Set GOOGLE_API_KEY, OPENAI_API_KEY, "
-                        "AZURE_OPENAI_API_KEY, ANTHROPIC_API_KEY, or AWS_ACCESS_KEY_ID + "
-                        "AWS_SECRET_ACCESS_KEY (+ AWS_REGION)."
+                        "AZURE_OPENAI_API_KEY, ANTHROPIC_API_KEY, NVIDIA_API_KEY, or "
+                        "AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (+ AWS_REGION)."
                     )
 
             # Auto-disable citations when no Perplexity key is available.

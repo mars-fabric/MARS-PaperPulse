@@ -249,6 +249,16 @@ def _make_llm(state: ReportState):
                 config=BotoConfig(read_timeout=600, connect_timeout=30),
                 model_kwargs={"temperature": temp, "max_tokens": min(max_tokens, 8192)},
             )
+        if model.startswith("nvidia/") or "nemotron" in model.lower():
+            # NVIDIA NIM is OpenAI-compatible — use ChatOpenAI with the NVIDIA base_url.
+            from langchain_openai import ChatOpenAI
+            base_url = getattr(keys, "NVIDIA_BASE_URL", None) or "https://integrate.api.nvidia.com/v1"
+            return ChatOpenAI(
+                model=model, temperature=temp,
+                openai_api_key=getattr(keys, "NVIDIA", None),
+                base_url=base_url,
+                max_tokens=max_tokens,
+            )
         if "gemini" in model:
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(

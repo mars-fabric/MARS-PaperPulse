@@ -132,6 +132,49 @@ network_policies:
       - { path: /sandbox/.venv/bin/python }
       - { path: /sandbox/.venv/bin/python3 }
 
+  # Perplexity API — used by paper citation enrichment (when PERPLEXITY_API_KEY is set).
+  perplexity:
+    name: perplexity
+    endpoints:
+      - { host: api.perplexity.ai, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # arXiv — used to fetch BibTeX entries for generated citations.
+  arxiv:
+    name: arxiv
+    endpoints:
+      - { host: arxiv.org, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # Semantic Scholar — optional novelty/literature search path in langgraph agents.
+  semantic_scholar:
+    name: semantic-scholar
+    endpoints:
+      - { host: api.semanticscholar.org, port: 443 }
+    binaries:
+      - { path: /usr/bin/python3.12 }
+      - { path: /usr/bin/python3 }
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+
+  # GitHub data bootstrap for mars_cmbagent RAG mode.
+  # Needed only when CMBAGENT_DISABLE_RAG is false and setup_cmbagent_data()
+  # is allowed to clone https://github.com/CMBAgents/cmbagent_data.git.
+  # github_data:
+  #   name: github-data
+  #   endpoints:
+  #     - { host: github.com, port: 443 }
+  #   binaries:
+  #     - { path: /usr/bin/git }
+
   # PyPI — lets the engineer agent install extra packages at runtime.
   # Remove this policy if you want to forbid all runtime installs.
   pypi:

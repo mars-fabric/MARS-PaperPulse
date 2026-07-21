@@ -336,7 +336,20 @@ def _enhance_via_llm(llm, section_name: str, content: str, min_paragraphs: int =
         min_paragraphs=min_paragraphs,
     )
     try:
-        response = llm.invoke([SystemMessage(content=_ENHANCE_SYSTEM), HumanMessage(content=prompt)])
+        try:
+            from cmbagent.tracing import get_tracer
+            _tracer = get_tracer("paperpulse.langgraph.report")
+        except Exception:
+            _tracer = None
+        if _tracer is not None:
+            with _tracer.start_as_current_span("report.enhance_section") as _span:
+                try:
+                    _span.set_attribute("report.section", section_name)
+                except Exception:
+                    pass
+                response = llm.invoke([SystemMessage(content=_ENHANCE_SYSTEM), HumanMessage(content=prompt)])
+        else:
+            response = llm.invoke([SystemMessage(content=_ENHANCE_SYSTEM), HumanMessage(content=prompt)])
         text = response.content if hasattr(response, "content") else str(response)
         # Keep markdown structure (## headings, - bullets), only strip LaTeX artifacts
         cleaned = _clean_enhanced(text)

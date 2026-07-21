@@ -54,6 +54,17 @@ matplotlib>=3.8.0
 scipy>=1.12.0
 scikit-learn>=1.4.0
 
+# Authentication
+argon2-cffi>=23.1.0               # memory-hard password hashing (Argon2 backend)
+passlib[argon2]>=1.7.4            # password hashing context (wraps argon2-cffi)
+python-jose[cryptography]>=3.3.0  # JWT signing/verification
+slowapi>=0.1.9                     # rate limiting (brute-force protection)
+email-validator>=2.0.0             # required by Pydantic EmailStr in auth router
+
+# Tracing / Observability (already pulled by mars_cmbagent[tracing]; pinned here for explicitness)
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+
 # Test dependencies
 pytest>=8.0.0
 pytest-asyncio>=0.23.0

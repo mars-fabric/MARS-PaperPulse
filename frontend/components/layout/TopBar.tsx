@@ -1,15 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Sun, Moon, Plus, Settings } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import ProviderSettings from '@/components/settings/ProviderSettings'
 
 interface TopBarProps {
   onNewSession: () => void
+  rightSlot?: ReactNode
 }
 
-export default function TopBar({ onNewSession }: TopBarProps) {
+export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
   const { theme, toggleTheme } = useTheme()
   const [showSettings, setShowSettings] = useState(false)
 
@@ -56,6 +58,7 @@ export default function TopBar({ onNewSession }: TopBarProps) {
 
           {/* Right: Settings + Theme toggle + New Session */}
           <div className="flex items-center gap-2">
+            {rightSlot}
             <button
               onClick={() => setShowSettings(true)}
               className="p-2 rounded-lg transition-colors duration-150

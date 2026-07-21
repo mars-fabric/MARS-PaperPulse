@@ -192,8 +192,8 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     // Define the poll function
     const doPoll = async () => {
       try {
-        const resp = await fetch(
-          getApiUrl(`/api/deepresearch/${id}/stages/${stageNum}/console?since=${consoleIndexRef.current}`)
+        const resp = await apiFetchWithRetry(
+          `/api/deepresearch/${id}/stages/${stageNum}/console?since=${consoleIndexRef.current}`
         )
         if (!resp.ok) return
         const data = await resp.json()
@@ -449,8 +449,8 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     if (analyzeConsolePollRef.current) clearInterval(analyzeConsolePollRef.current)
     analyzeConsolePollRef.current = setInterval(async () => {
       try {
-        const resp = await fetch(
-          getApiUrl(`/api/deepresearch/${id}/analyze-files/console?since=${idx}`)
+        const resp = await apiFetchWithRetry(
+          `/api/deepresearch/${id}/analyze-files/console?since=${idx}`
         )
         if (!resp.ok) return
         const data = await resp.json()
@@ -567,7 +567,7 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
 
       // Restore file context if it was previously analysed
       try {
-        const ctxResp = await fetch(getApiUrl(`/api/deepresearch/${id}/analyze-files/console?since=0`))
+        const ctxResp = await apiFetchWithRetry(`/api/deepresearch/${id}/analyze-files/console?since=0`)
         if (ctxResp.ok) {
           const ctxData = await ctxResp.json()
           if (ctxData.is_done && ctxData.context_text) {

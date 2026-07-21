@@ -16,7 +16,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from core.dependencies import get_current_user, get_optional_user, get_db
+from services.ownership import require_task_owner
+from services.audit_logger import write_audit
+from services.tracing_bridge import (
+    set_task_trace_context,
+    clear_task_trace_context,
+    get_task_trace_context,
+    get_tracer,
+)
 
 from models.deepresearch_schemas import (
     DeepresearchCreateRequest,
@@ -415,7 +424,12 @@ def _clear_console_buffer(buf_key: str):
 # =============================================================================
 
 @router.post("/create", response_model=DeepresearchCreateResponse)
-async def create_deepresearch_task(request: DeepresearchCreateRequest):
+async def create_deepresearch_task(
+    http_request: Request,
+    request: DeepresearchCreateRequest,
+    current_user=Depends(get_current_user),
+    auth_db=Depends(get_db),
+):
     """Create a new Deepresearch research task with 4 pending stages."""
     task_id = str(uuid.uuid4())
 
@@ -433,6 +447,7 @@ async def create_deepresearch_task(request: DeepresearchCreateRequest):
         mode="deepresearch-research",
         config={"task_id": task_id, "base_work_dir": base_work_dir},
         name=f"Deepresearch: {request.task[:60]}",
+        user_id=current_user.id,
     )
 
     # Session-based work dir: {base}/sessions/{session_id}/tasks/{task_id}
@@ -449,6 +464,8 @@ async def create_deepresearch_task(request: DeepresearchCreateRequest):
         # Create parent WorkflowRun
         from cmbagent.database.models import WorkflowRun
 
+        from core.logging import current_trace_id as _trace_ctx
+        _trace_id = _trace_ctx.get() or str(uuid.uuid4().hex)
         parent_run = WorkflowRun(
             id=task_id,
             session_id=session_id,
@@ -464,6 +481,8 @@ async def create_deepresearch_task(request: DeepresearchCreateRequest):
                 "data_description": request.data_description or "",
                 "config": request.config or {},
                 "session_id": session_id,
+                "user_id": current_user.id,
+                "trace_id": _trace_id,
             },
         )
         db.add(parent_run)
@@ -490,7 +509,18 @@ async def create_deepresearch_task(request: DeepresearchCreateRequest):
             with open(desc_path, "w") as f:
                 f.write(request.data_description)
 
-        logger.info("deepresearch_task_created task_id=%s session_id=%s", task_id, session_id)
+        write_audit(
+            auth_db,
+            user_id=current_user.id,
+            action="task_create",
+            resource_type="task",
+            resource_id=task_id,
+            ip_address=http_request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                or (http_request.client.host if http_request.client else ""),
+            metadata={"trace_id": _trace_id, "task": request.task[:120]},
+        )
+        logger.info("deepresearch_task_created task_id=%s session_id=%s user_id=%s",
+                    task_id, session_id, current_user.id)
         return DeepresearchCreateResponse(
             task_id=task_id,
             work_dir=work_dir,
@@ -509,7 +539,13 @@ async def create_deepresearch_task(request: DeepresearchCreateRequest):
 # =============================================================================
 
 @router.post("/{task_id}/stages/{stage_num}/execute")
-async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecuteRequest = None):
+async def execute_stage(
+    task_id: str,
+    stage_num: int,
+    request: DeepresearchExecuteRequest = None,
+    current_user=Depends(get_current_user),
+    auth_db=Depends(get_db),
+):
     """Trigger execution of a single Deepresearch phase.
 
     Runs the phase asynchronously in the background. Connect to
@@ -525,6 +561,9 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
 
     db = _get_db()
     try:
+        # Ownership: raises 404/403 if task not found or doesn't belong to user
+        require_task_owner(task_id, current_user, db)
+
         session_id = _get_session_id_for_task(task_id, db)
         repo = _get_stage_repo(db, session_id=session_id)
         stages = repo.list_stages(parent_run_id=task_id)
@@ -624,11 +663,30 @@ async def execute_stage(task_id: str, stage_num: int, request: DeepresearchExecu
     finally:
         db.close()
 
-    # Launch background execution
-    task = asyncio.create_task(
-        _run_phase(task_id, stage_num, task_description, work_dir, shared_state, config_overrides)
+    # Set per-task trace context BEFORE creating the asyncio task so the
+    # worker thread (via asyncio.to_thread) inherits the contextvar values.
+    trace_tokens = set_task_trace_context(task_id, current_user.id)
+
+    # Write audit entry for stage execution start (use auth_db so tests work)
+    write_audit(
+        auth_db,
+        user_id=current_user.id,
+        action="stage_execute",
+        resource_type="task",
+        resource_id=task_id,
+        metadata={"stage_num": stage_num, "stage_name": STAGE_DEFS[stage_num - 1]["name"]},
     )
-    _running_tasks[bg_key] = task
+
+    try:
+        task = asyncio.create_task(
+            _run_phase(
+                task_id, stage_num, task_description, work_dir, shared_state,
+                config_overrides, user_id=current_user.id,
+            )
+        )
+        _running_tasks[bg_key] = task
+    finally:
+        clear_task_trace_context(trace_tokens)
 
     return {"status": "executing", "stage_num": stage_num, "task_id": task_id}
 
@@ -640,12 +698,17 @@ async def _run_phase(
     work_dir: str,
     shared_state: Dict[str, Any],
     config_overrides: Dict[str, Any],
+    user_id: str = "",
 ):
     """Execute a Deepresearch phase in the background.
 
     Stages 1-3 call planning_and_control_context_carryover() directly
     with full callbacks (cost tracking, event logging, structured print).
     Stage 4 uses DeepresearchPaperPhase (LangGraph).
+    Stage 5 uses DeepresearchReportPhase or re-runs Stage 4 (paper variant).
+
+    Each stage runs inside a per-task OTel root span so all cmbagent LLM
+    spans are grouped under the same Langfuse trace.
     """
     sdef = STAGE_DEFS[stage_num - 1]
     buf_key = f"{task_id}:{stage_num}"
@@ -654,38 +717,77 @@ async def _run_phase(
     with _console_lock:
         _console_buffers[buf_key] = [f"Starting {sdef['name']}..."]
 
+    # Re-apply trace context (asyncio.to_thread workers inherit contextvars,
+    # but the asyncio task itself also needs it for direct awaits).
+    trace_tokens = set_task_trace_context(task_id, user_id)
+    tracer = get_tracer("paperpulse.stages")
+
     try:
-        if stage_num <= 3:
-            await _run_planning_control_stage(
-                task_id, stage_num, sdef, buf_key,
-                task_description, work_dir, shared_state, config_overrides,
-            )
-        elif stage_num == 4:
-            await _run_paper_stage(
-                task_id, stage_num, sdef, buf_key,
-                task_description, work_dir, shared_state, config_overrides,
-            )
-        else:  # stage_num == 5
-            pipeline_choice = (config_overrides or {}).get("pipeline_choice", "report")
-            if pipeline_choice == "paper":
-                # User chose: run the classic academic paper pipeline
+        with tracer.start_as_current_span(
+            f"stage_{stage_num}_{sdef['name']}",
+        ) as span:
+            try:
+                span.set_attribute("task_id", task_id)
+                span.set_attribute("stage_num", stage_num)
+                span.set_attribute("stage_name", sdef["name"])
+                span.set_attribute("user_id", user_id)
+            except Exception:
+                pass
+
+            if stage_num <= 3:
+                await _run_planning_control_stage(
+                    task_id, stage_num, sdef, buf_key,
+                    task_description, work_dir, shared_state, config_overrides,
+                )
+            elif stage_num == 4:
                 await _run_paper_stage(
                     task_id, stage_num, sdef, buf_key,
                     task_description, work_dir, shared_state, config_overrides,
                 )
-            else:
-                # User chose: run the new enhanced magazine-style PDF pipeline
-                await _run_report_stage(
-                    task_id, stage_num, sdef, buf_key,
-                    task_description, work_dir, shared_state, config_overrides,
-                )
+            else:  # stage_num == 5
+                pipeline_choice = (config_overrides or {}).get("pipeline_choice", "report")
+                if pipeline_choice == "paper":
+                    # User chose: run the classic academic paper pipeline
+                    await _run_paper_stage(
+                        task_id, stage_num, sdef, buf_key,
+                        task_description, work_dir, shared_state, config_overrides,
+                    )
+                else:
+                    # User chose: run the new enhanced magazine-style PDF pipeline
+                    await _run_report_stage(
+                        task_id, stage_num, sdef, buf_key,
+                        task_description, work_dir, shared_state, config_overrides,
+                    )
+
+        # Flush spans for this stage so they reach Langfuse even if the
+        # process is idle or restarts before the batch processor fires.
+        try:
+            from opentelemetry import trace as _otel_trace
+            _provider = _otel_trace.get_tracer_provider()
+            if hasattr(_provider, "force_flush"):
+                _provider.force_flush()
+        except Exception:
+            pass
+
+        # Write audit entry for stage completion
+        _adb = _get_db()
+        try:
+            write_audit(
+                _adb,
+                user_id=user_id or None,
+                action="stage_complete",
+                resource_type="task",
+                resource_id=task_id,
+                metadata={"stage_num": stage_num, "stage_name": sdef["name"]},
+            )
+        finally:
+            _adb.close()
+
     except Exception as e:
         logger.error("deepresearch_phase_exception task=%s stage=%d error=%s", task_id, stage_num, e, exc_info=True)
         with _console_lock:
-            _console_buffers.setdefault(buf_key, []).append(
-                f"Error: {e}"
-            )
-        # Mark stage as failed
+            _console_buffers.setdefault(buf_key, []).append(f"Error: {e}")
+        # Mark stage as failed + audit
         db = _get_db()
         try:
             sid = _get_session_id_for_task(task_id, db)
@@ -695,9 +797,18 @@ async def _run_phase(
             if stage:
                 repo.update_stage_status(stage.id, "failed", error_message=str(e))
             db.commit()
+            write_audit(
+                db,
+                user_id=user_id or None,
+                action="stage_fail",
+                resource_type="task",
+                resource_id=task_id,
+                metadata={"stage_num": stage_num, "error": str(e)[:200]},
+            )
         finally:
             db.close()
     finally:
+        clear_task_trace_context(trace_tokens)
         bg_key = f"{task_id}:{stage_num}"
         _running_tasks.pop(bg_key, None)
         # Schedule delayed buffer cleanup (gives WebSocket 60s to read remaining lines)
@@ -1266,10 +1377,11 @@ def _collect_stage_output_files(
 # =============================================================================
 
 @router.get("/{task_id}/stages/{stage_num}/content", response_model=DeepresearchStageContentResponse)
-async def get_stage_content(task_id: str, stage_num: int):
+async def get_stage_content(task_id: str, stage_num: int, current_user=Depends(get_current_user)):
     """Get the output content and shared_state for a completed stage."""
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         session_id = _get_session_id_for_task(task_id, db)
         repo = _get_stage_repo(db, session_id=session_id)
         stages = repo.list_stages(parent_run_id=task_id)
@@ -1346,7 +1458,7 @@ async def get_stage_content(task_id: str, stage_num: int):
 # =============================================================================
 
 @router.put("/{task_id}/stages/{stage_num}/content")
-async def update_stage_content(task_id: str, stage_num: int, request: DeepresearchContentUpdateRequest):
+async def update_stage_content(task_id: str, stage_num: int, request: DeepresearchContentUpdateRequest, current_user=Depends(get_current_user)):
     """Save user edits to a stage's content.
 
     Updates both the markdown file on disk and the output_data['shared']
@@ -1359,6 +1471,7 @@ async def update_stage_content(task_id: str, stage_num: int, request: Deepresear
 
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         session_id = _get_session_id_for_task(task_id, db)
         repo = _get_stage_repo(db, session_id=session_id)
         stages = repo.list_stages(parent_run_id=task_id)
@@ -1411,7 +1524,7 @@ async def update_stage_content(task_id: str, stage_num: int, request: Deepresear
 # =============================================================================
 
 @router.post("/{task_id}/stages/{stage_num}/refine", response_model=DeepresearchRefineResponse)
-async def refine_stage_content(task_id: str, stage_num: int, request: DeepresearchRefineRequest):
+async def refine_stage_content(task_id: str, stage_num: int, request: DeepresearchRefineRequest, current_user=Depends(get_current_user)):
     """Use LLM to refine stage content via diff-based patching.
 
     Flow:
@@ -1423,6 +1536,12 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
     """
     import concurrent.futures
     from services.diff_patcher import refine_with_diff
+
+    _own_db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _own_db)
+    finally:
+        _own_db.close()
 
     def _llm_call(messages, model, temperature, max_tokens):
         from cmbagent.llm_provider import safe_completion
@@ -1481,7 +1600,7 @@ async def refine_stage_content(task_id: str, stage_num: int, request: Deepresear
 # =============================================================================
 
 @router.post("/{task_id}/analyze-files", response_model=AnalyzeFilesResponse)
-async def analyze_files(task_id: str):
+async def analyze_files(task_id: str, current_user=Depends(get_current_user)):
     """Analyze uploaded files using LLM — runs in background.
 
     Extracts metadata for CSV/TSV, JSON, TXT, FITS, HDF5, NPY/NPZ, PDF files,
@@ -1495,6 +1614,7 @@ async def analyze_files(task_id: str):
 
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         parent_run = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not parent_run:
@@ -1513,8 +1633,13 @@ async def analyze_files(task_id: str):
 
 
 @router.get("/{task_id}/analyze-files/console")
-async def get_analyze_console(task_id: str, since: int = 0):
+async def get_analyze_console(task_id: str, since: int = 0, current_user=Depends(get_current_user)):
     """Poll analysis progress. Returns is_done=True and context_text when complete."""
+    _own_db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _own_db)
+    finally:
+        _own_db.close()
     buf_key = f"{task_id}:analyze"
     raw_lines = _get_console_lines(buf_key, since_index=since)
 
@@ -1558,10 +1683,11 @@ async def get_analyze_console(task_id: str, since: int = 0):
 
 
 @router.put("/{task_id}/context")
-async def save_file_context(task_id: str, request: RefineContextRequest):
+async def save_file_context(task_id: str, request: RefineContextRequest, current_user=Depends(get_current_user)):
     """Save an edited data context directly to data_context.md (no LLM involved)."""
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         run = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not run:
@@ -1580,13 +1706,14 @@ async def save_file_context(task_id: str, request: RefineContextRequest):
 
 
 @router.post("/{task_id}/refine-context", response_model=RefineContextResponse)
-async def refine_file_context(task_id: str, request: RefineContextRequest):
+async def refine_file_context(task_id: str, request: RefineContextRequest, current_user=Depends(get_current_user)):
     """Use LLM to refine the data context via diff-based patching, then save."""
     import concurrent.futures
     from services.diff_patcher import refine_with_diff
 
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         run = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not run:
@@ -1629,10 +1756,11 @@ async def refine_file_context(task_id: str, request: RefineContextRequest):
 
 
 @router.patch("/{task_id}/description")
-async def update_task_description(task_id: str, request: UpdateDescriptionRequest):
+async def update_task_description(task_id: str, request: UpdateDescriptionRequest, current_user=Depends(get_current_user)):
     """Update task description and/or data description — used when task is pre-created."""
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         run = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not run:
@@ -1933,12 +2061,17 @@ async def _run_file_analysis(task_id: str, work_dir: str, buf_key: str):
 # =============================================================================
 
 @router.get("/{task_id}/stages/{stage_num}/console")
-async def get_stage_console(task_id: str, stage_num: int, since: int = 0):
+async def get_stage_console(task_id: str, stage_num: int, since: int = 0, current_user=Depends(get_current_user)):
     """Get console output lines for a running stage (REST polling fallback).
 
     Args:
         since: Line index to start from (for incremental fetching)
     """
+    _own_db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _own_db)
+    finally:
+        _own_db.close()
     buf_key = f"{task_id}:{stage_num}"
     lines = _get_console_lines(buf_key, since_index=since)
     return {
@@ -1953,26 +2086,36 @@ async def get_stage_console(task_id: str, stage_num: int, since: int = 0):
 # =============================================================================
 
 @router.get("/recent", response_model=List[DeepresearchRecentTaskResponse])
-async def list_recent_tasks(include_all: bool = False):
+async def list_recent_tasks(
+    include_all: bool = False,
+    current_user=Depends(get_current_user),
+):
     """List Deepresearch tasks for the session sidebar.
+
+    Users see only their own tasks; admins see all tasks.
 
     Args:
         include_all: If True, include completed and failed tasks too.
-                     If False (default), only return active/in-progress tasks.
     """
     db = _get_db()
     try:
-        from cmbagent.database.models import WorkflowRun
+        from cmbagent.database.models import WorkflowRun, Session as DBSession
 
-        query = db.query(WorkflowRun).filter(
-            WorkflowRun.mode == "deepresearch-research",
-            WorkflowRun.parent_run_id.is_(None),  # Only parent runs
+        query = (
+            db.query(WorkflowRun)
+            .join(DBSession, WorkflowRun.session_id == DBSession.id)
+            .filter(
+                WorkflowRun.mode == "deepresearch-research",
+                WorkflowRun.parent_run_id.is_(None),
+            )
         )
 
+        # Restrict to the current user's tasks (admins see all)
+        if current_user.role != "admin":
+            query = query.filter(DBSession.user_id == current_user.id)
+
         if not include_all:
-            query = query.filter(
-                WorkflowRun.status.in_(["executing", "draft", "planning"]),
-            )
+            query = query.filter(WorkflowRun.status.in_(["executing", "draft", "planning"]))
 
         runs = (
             query
@@ -2035,11 +2178,16 @@ async def list_recent_tasks(include_all: bool = False):
 # =============================================================================
 
 @router.post("/{task_id}/stop")
-async def stop_task(task_id: str):
+async def stop_task(task_id: str, current_user=Depends(get_current_user)):
     """Stop a running Deepresearch task.
 
     Cancels any executing background stage and marks it as failed.
     """
+    _db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _db)
+    finally:
+        _db.close()
     # Cancel any running asyncio tasks for this task_id
     cancelled = []
     for key in list(_running_tasks):
@@ -2077,12 +2225,19 @@ async def stop_task(task_id: str):
 # =============================================================================
 
 @router.delete("/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, current_user=Depends(get_current_user)):
     """Delete a Deepresearch task, its DB records, and its work directory.
 
     Running stages are cancelled first.
     """
     import shutil
+
+    # Ownership check
+    _chk_db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _chk_db)
+    finally:
+        _chk_db.close()
 
     # 1. Cancel any running background tasks
     for key in list(_running_tasks):
@@ -2134,7 +2289,7 @@ async def delete_task(task_id: str):
 # =============================================================================
 
 @router.post("/{task_id}/ai-edit-tex", response_model=AiEditTexResponse)
-async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
+async def ai_edit_tex(task_id: str, request: AiEditTexRequest, current_user=Depends(get_current_user)):
     """Use an LLM to apply a natural-language edit instruction to a .tex file.
 
     Returns the edited LaTeX source. The caller is responsible for saving it
@@ -2144,9 +2299,10 @@ async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
 
     tex_path = os.path.realpath(request.tex_path)
 
-    # Validate the .tex path belongs to this task's work directory
+    # Validate ownership + the .tex path belongs to this task's work directory
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not parent:
@@ -2211,7 +2367,7 @@ async def ai_edit_tex(task_id: str, request: AiEditTexRequest):
 # =============================================================================
 
 @router.post("/{task_id}/compile-tex", response_model=CompileTexResponse)
-async def compile_tex(task_id: str, request: CompileTexRequest):
+async def compile_tex(task_id: str, request: CompileTexRequest, current_user=Depends(get_current_user)):
     """Compile a .tex file to PDF using xelatex.
 
     The .tex file must already be saved on disk before calling this endpoint.
@@ -2220,6 +2376,12 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
     import concurrent.futures
     import subprocess
     import shutil
+
+    _chk_db = _get_db()
+    try:
+        require_task_owner(task_id, current_user, _chk_db)
+    finally:
+        _chk_db.close()
 
     tex_path = os.path.realpath(request.tex_path)
 
@@ -2306,7 +2468,7 @@ async def compile_tex(task_id: str, request: CompileTexRequest):
 # =============================================================================
 
 @router.get("/{task_id}", response_model=DeepresearchTaskStateResponse)
-async def get_task_state(task_id: str):
+async def get_task_state(task_id: str, current_user=Depends(get_current_user)):
     """Get full task state for resume - all stages, costs, and progress.
 
     Automatically detects and resets stale 'running' stages (no active
@@ -2314,6 +2476,7 @@ async def get_task_state(task_id: str):
     """
     db = _get_db()
     try:
+        require_task_owner(task_id, current_user, db)
         from cmbagent.database.models import WorkflowRun
         parent = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
         if not parent:

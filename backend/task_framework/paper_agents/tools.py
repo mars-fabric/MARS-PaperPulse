@@ -14,7 +14,23 @@ def LLM_call(prompt, state):
     This function calls the LLM and update tokens
     """
 
-    message = state['llm']['llm'].invoke(prompt)
+    try:
+        from cmbagent.tracing import get_tracer
+        _tracer = get_tracer("paperpulse.langgraph.paper")
+    except Exception:
+        _tracer = None
+
+    if _tracer is not None:
+        with _tracer.start_as_current_span("paper.llm_call") as _span:
+            message = state['llm']['llm'].invoke(prompt)
+            try:
+                _span.set_attribute("llm.model", str(state['llm'].get('model', '')))
+                _span.set_attribute("llm.input_tokens", message.usage_metadata['input_tokens'])
+                _span.set_attribute("llm.output_tokens", message.usage_metadata['output_tokens'])
+            except Exception:
+                pass
+    else:
+        message = state['llm']['llm'].invoke(prompt)
     input_tokens  = message.usage_metadata['input_tokens']
     output_tokens = message.usage_metadata['output_tokens']
     if output_tokens>state['llm']['max_output_tokens']:

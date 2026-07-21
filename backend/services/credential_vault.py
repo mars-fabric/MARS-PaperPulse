@@ -108,7 +108,13 @@ class CredentialVault:
             with open(self._cred_file, "rb") as f:
                 encrypted = f.read()
             decrypted = self._decrypt(encrypted)
-            self._credentials = json.loads(decrypted.decode())
+            raw = json.loads(decrypted.decode())
+            # Strip any accidental whitespace/newlines that may have been
+            # stored in previous versions (caused Illegal header value errors).
+            self._credentials = {
+                pid: {k: v.strip() if isinstance(v, str) else v for k, v in creds.items()}
+                for pid, creds in raw.items()
+            }
             logger.info(
                 "Loaded credentials for %d providers", len(self._credentials)
             )
@@ -139,7 +145,12 @@ class CredentialVault:
     def set(self, provider_id: str, credentials: Dict[str, str]) -> None:
         """Store credentials for a provider and persist."""
         with self._write_lock:
-            self._credentials[provider_id] = credentials
+            # Strip surrounding whitespace/newlines from all string values so
+            # API keys copied with trailing newlines don't corrupt HTTP headers.
+            self._credentials[provider_id] = {
+                k: v.strip() if isinstance(v, str) else v
+                for k, v in credentials.items()
+            }
             self._save()
 
     def remove(self, provider_id: str) -> None:

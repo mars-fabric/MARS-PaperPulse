@@ -16,16 +16,21 @@ from typing import Optional
 import structlog
 
 # Context variables for request tracing
-current_task_id: ContextVar[Optional[str]] = ContextVar('task_id', default=None)
+current_task_id:    ContextVar[Optional[str]] = ContextVar('task_id',    default=None)
 current_session_id: ContextVar[Optional[str]] = ContextVar('session_id', default=None)
-current_run_id: ContextVar[Optional[str]] = ContextVar('run_id', default=None)
+current_run_id:     ContextVar[Optional[str]] = ContextVar('run_id',     default=None)
+# Added for auth / observability — user and distributed trace correlation
+current_user_id:    ContextVar[Optional[str]] = ContextVar('user_id',    default=None)
+current_trace_id:   ContextVar[Optional[str]] = ContextVar('trace_id',   default=None)
 
 
 def add_context_processor(logger, method_name, event_dict):
     """Add context variables to all log entries."""
-    task_id = current_task_id.get()
+    task_id    = current_task_id.get()
     session_id = current_session_id.get()
-    run_id = current_run_id.get()
+    run_id     = current_run_id.get()
+    user_id    = current_user_id.get()
+    trace_id   = current_trace_id.get()
 
     if task_id:
         event_dict['task_id'] = task_id
@@ -33,6 +38,10 @@ def add_context_processor(logger, method_name, event_dict):
         event_dict['session_id'] = session_id
     if run_id:
         event_dict['run_id'] = run_id
+    if user_id:
+        event_dict['user_id'] = user_id
+    if trace_id:
+        event_dict['trace_id'] = trace_id
 
     return event_dict
 
@@ -183,14 +192,27 @@ def bind_context(
     session_id: Optional[str] = None,
     run_id: Optional[str] = None
 ):
-    """
-    Bind context for all subsequent log calls in this context.
+    """Bind task/session/run context for all subsequent log calls."""
+    if task_id:
+        current_task_id.set(task_id)
+    if session_id:
+        current_session_id.set(session_id)
+    if run_id:
+        current_run_id.set(run_id)
 
-    Args:
-        task_id: Task identifier
-        session_id: Session identifier
-        run_id: Run identifier
-    """
+
+def bind_logging_context(
+    user_id: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+):
+    """Bind any combination of context vars for structured logging."""
+    if user_id:
+        current_user_id.set(user_id)
+    if trace_id:
+        current_trace_id.set(trace_id)
     if task_id:
         current_task_id.set(task_id)
     if session_id:

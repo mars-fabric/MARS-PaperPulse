@@ -7,8 +7,10 @@ import mimetypes
 import shutil
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from core.dependencies import get_current_user
+from services.ownership import require_file_owner
 
 from models.schemas import FileItem, DirectoryListing
 from core.config import settings
@@ -421,6 +423,7 @@ async def upload_file(
     file: UploadFile = File(...),
     task_id: str = Form(...),
     subfolder: str = Form("input_files"),
+    current_user=Depends(get_current_user),
 ):
     """Upload a file for a Deepresearch research task.
 
@@ -460,6 +463,7 @@ async def upload_file(
         from cmbagent.database.models import WorkflowRun
         db = get_db_session()
         try:
+            require_file_owner(task_id, current_user, db)
             run = db.query(WorkflowRun).filter(WorkflowRun.id == task_id).first()
             if run and run.meta and run.meta.get("work_dir"):
                 work_dir_from_db = run.meta["work_dir"]

@@ -32,6 +32,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential gfortran \
     && rm -rf /var/lib/apt/lists/*
 
+# TeX distribution for compiling .tex files (XeLaTeX + BibTeX)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        texlive-xetex \
+        texlive-latex-base \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-publishers \
+        texlive-bibtex-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify TeX tools are available (fail-fast at build time)
+RUN xelatex --version > /dev/null 2>&1 \
+    && bibtex --version > /dev/null 2>&1 \
+    && echo "[paperpulse] TeX tools verified: xelatex, bibtex"
+
 # ── Backend: venv on Python 3.12 + deps ──────────────────────────────────────
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN uv venv --clear --python 3.12 /sandbox/.venv \

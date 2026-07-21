@@ -13,6 +13,15 @@ FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 export CMBAGENT_DEFAULT_WORK_DIR="${CMBAGENT_DEFAULT_WORK_DIR:-/sandbox/cmbdir}"
 mkdir -p "${CMBAGENT_DEFAULT_WORK_DIR}"
 
+# Startup sanity check: warn if TeX tools are missing from PATH
+# (Stage 5 paper pipeline requires xelatex and bibtex)
+if ! command -v xelatex &>/dev/null; then
+    echo "[paperpulse] WARNING: xelatex not found in PATH — Stage 5 (paper pipeline) will fail"
+fi
+if ! command -v bibtex &>/dev/null; then
+    echo "[paperpulse] WARNING: bibtex not found in PATH — Stage 5 (paper pipeline) will fail"
+fi
+
 echo "[paperpulse] backend  -> http://0.0.0.0:${PORT}  (docs at /docs)"
 ( cd /app/backend && exec python run.py ) &
 backend_pid=$!

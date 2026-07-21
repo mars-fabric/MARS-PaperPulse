@@ -101,6 +101,22 @@ openshell sandbox create --from openshell-paperpulse:latest --name paperpulse \
   --no-auto-providers --no-tty -- start-paperpulse
 ```
 
+or 
+
+```bash
+cd MARS-PaperPulse
+getval(){ grep -E "^$1=" backend/.env | tail -1 | sed -E "s/^$1=//; s/^\"//; s/\".*$//"; }
+
+openshell sandbox create --from openshell-paperpulse:latest --name paperpulse-2 \
+  --policy sandboxes/paperpulse/policy.yaml \
+  --forward 3200 \
+  --env FRONTEND_PORT=3200 --env PORT=8000 --env CMBAGENT_LLM_PROVIDER=nvidia \
+  --env NVIDIA_API_KEY="$(getval NVIDIA_API_KEY)" \
+  --env NVIDIA_BASE_URL="$(getval NVIDIA_BASE_URL)" \
+  --env CMBAGENT_NVIDIA_DEFAULT_MODEL="$(getval CMBAGENT_NVIDIA_DEFAULT_MODEL)" \
+  --no-auto-providers --no-tty -- start-paperpulse
+```
+
 This command **stays in the foreground**, streaming both services' logs and holding
 the port-forward. Leave it running. You'll see:
 

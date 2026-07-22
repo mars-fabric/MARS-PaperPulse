@@ -68,6 +68,8 @@ interface SessionSidebarProps {
   onSelectSession: (taskId: string) => void
   onDeleteSession: (taskId: string) => void
   collapsed?: boolean
+  width?: number
+  onStartResize?: () => void
 }
 
 export default function SessionSidebar({
@@ -76,6 +78,8 @@ export default function SessionSidebar({
   onSelectSession,
   onDeleteSession,
   collapsed = false,
+  width = 280,
+  onStartResize,
 }: SessionSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'running' | 'completed' | 'failed'>('all')
@@ -104,14 +108,23 @@ export default function SessionSidebar({
 
   return (
     <div
-      className="h-full flex flex-col border-l"
+      className="h-full flex flex-col border-l relative group"
       style={{
-        width: '280px',
-        minWidth: '280px',
+        width: `${width}px`,
+        minWidth: `${width}px`,
         backgroundColor: 'var(--mars-color-surface)',
         borderColor: 'var(--mars-color-border)',
       }}
     >
+      {/* Resize Handle */}
+      <div
+        onMouseDown={onStartResize}
+        className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gradient-to-b from-blue-500/40 via-blue-500/20 to-transparent transition-colors"
+        style={{
+          backgroundColor: 'transparent',
+        }}
+        title="Drag to resize sidebar"
+      />
       {/* Header */}
       <div
         className="flex-shrink-0 px-4 py-3 border-b"

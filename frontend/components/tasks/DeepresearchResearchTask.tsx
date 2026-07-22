@@ -82,6 +82,14 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
     }
   }, [currentStep, isExecuting, setCurrentStep])
 
+  const handleStepClick = useCallback((stepIndex: number) => {
+    // Allow clicking on completed or failed steps to navigate back
+    // Prevent navigation if currently executing
+    if (!isExecuting) {
+      setCurrentStep(stepIndex as DeepresearchWizardStep)
+    }
+  }, [isExecuting, setCurrentStep])
+
   const handleStop = useCallback(async () => {
     await stopTask()
   }, [stopTask])
@@ -174,7 +182,7 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
 
       {/* Stepper */}
       <div className="mb-8">
-        <Stepper steps={stepperSteps} orientation="horizontal" size="sm" />
+        <Stepper steps={stepperSteps} orientation="horizontal" size="sm" onStepClick={handleStepClick} />
       </div>
 
       {/* Panel content */}

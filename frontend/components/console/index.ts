@@ -1,3 +1,6 @@
 export { default as LogEntryRenderer } from './LogEntryRenderer'
 export { default as PhaseIndicatorBar } from './PhaseIndicatorBar'
 export { default as StructuredConsoleOutput } from './StructuredConsoleOutput'
+export { default as ModernConsoleViewer } from './ModernConsoleViewer'
+export { default as ModernArtifactsViewer } from './ModernArtifactsViewer'
+export { default as MacOSTerminalViewer } from './MacOSTerminalViewer'

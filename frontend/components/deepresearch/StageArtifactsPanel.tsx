@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { RefreshCw, Download, FileText, Image, File } from 'lucide-react'
+import { RefreshCw, Download, Eye, FileText, Image, File } from 'lucide-react'
+import FilePreviewModal from '@/components/files/FilePreviewModal'
 import { getApiUrl } from '@/lib/config'
 
 interface StageArtifactsPanelProps {
@@ -76,6 +77,7 @@ export default function StageArtifactsPanel({
 }: StageArtifactsPanelProps) {
   const [activeTab, setActiveTab] = useState<FileCategory>('Results')
   const [fileSizes, setFileSizes] = useState<Record<string, number>>({})
+  const [previewFile, setPreviewFile] = useState<{ path: string; name: string } | null>(null)
 
   // Categorize all files
   const categorized: Record<FileCategory, string[]> = {
@@ -249,10 +251,22 @@ export default function StageArtifactsPanel({
                     {formatBytes(size)}
                   </span>
                 )}
+                <button
+                  onClick={() => setPreviewFile({ path, name: fileName })}
+                  className="flex items-center gap-1 text-xs font-medium shrink-0 ml-1 px-2 py-1 rounded-mars-sm transition-colors"
+                  style={{
+                    color: 'var(--mars-color-primary)',
+                    backgroundColor: 'var(--mars-color-primary-subtle)',
+                  }}
+                  title="Preview file"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  View
+                </button>
                 <a
                   href={downloadUrl}
                   download={fileName}
-                  className="flex items-center gap-1 text-xs font-medium shrink-0 ml-1"
+                  className="flex items-center gap-1 text-xs font-medium shrink-0"
                   style={{ color: 'var(--mars-color-primary)' }}
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -263,6 +277,14 @@ export default function StageArtifactsPanel({
           })
         )}
       </div>
+
+      {/* File Preview Modal */}
+      <FilePreviewModal
+        isOpen={previewFile !== null}
+        filePath={previewFile?.path || null}
+        fileName={previewFile?.name}
+        onClose={() => setPreviewFile(null)}
+      />
     </div>
   )
 }

@@ -115,9 +115,9 @@ p, h1, h2, h3, h4, h5, h6 {
   --mars-space-16: 4rem;     /* 64px */
   --mars-space-20: 5rem;     /* 80px */
 
-  /* --- Typography --- */
-  --mars-font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --mars-font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  /* --- Typography (Modern Font Stack) --- */
+  --mars-font-sans: 'Geist', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  --mars-font-mono: 'Geist Mono', 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
 
   --mars-text-xs: 0.75rem;    /* 12px */
   --mars-text-sm: 0.875rem;   /* 14px */
@@ -362,6 +362,109 @@ code, pre, kbd, samp {
   transition-property: color, background-color, border-color, box-shadow, opacity, transform;
   transition-timing-function: var(--mars-ease-standard);
   transition-duration: var(--mars-duration-fast);
+}
+
+/* Modern Gradient Utilities */
+.mars-gradient-primary {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%);
+}
+
+.mars-gradient-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.mars-gradient-danger {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+}
+
+.mars-gradient-accent {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.mars-gradient-warm {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+/* Modern Card Styles */
+.mars-card {
+  background-color: var(--mars-color-surface);
+  border: 1px solid var(--mars-color-border);
+  border-radius: var(--mars-radius-lg);
+  transition: all var(--mars-duration-normal) var(--mars-ease-standard);
+}
+
+.mars-card:hover {
+  border-color: var(--mars-color-border-strong);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.mars-card-elevated {
+  background-color: var(--mars-color-surface-raised);
+  border: 1px solid var(--mars-color-border-subtle);
+  box-shadow: var(--mars-shadow-sm);
+}
+
+/* Modern Button Styles */
+.mars-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-size: var(--mars-text-sm);
+  font-weight: var(--mars-font-medium);
+  border-radius: var(--mars-radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--mars-duration-fast) var(--mars-ease-standard);
+  user-select: none;
+}
+
+.mars-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mars-btn-primary {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.mars-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.mars-btn-secondary {
+  background-color: var(--mars-color-surface-overlay);
+  color: var(--mars-color-text);
+  border: 1px solid var(--mars-color-border);
+}
+
+.mars-btn-secondary:hover:not(:disabled) {
+  background-color: var(--mars-color-surface-sunken);
+  border-color: var(--mars-color-border-strong);
+}
+
+.mars-btn-ghost {
+  background-color: transparent;
+  color: var(--mars-color-text-secondary);
+  border: 1px solid transparent;
+}
+
+.mars-btn-ghost:hover:not(:disabled) {
+  background-color: var(--mars-color-bg-hover);
+  border-color: var(--mars-color-border-subtle);
+}
+
+.mars-btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: var(--mars-text-xs);
+}
+
+.mars-btn-lg {
+  padding: 0.875rem 1.5rem;
+  font-size: var(--mars-text-base);
 }
 
 /* --------------------------------------------------------------------------
@@ -775,4 +878,187 @@ code, pre, kbd, samp {
 
 .mars-csv-table tr:hover td {
   background-color: var(--mars-color-bg-hover);
+}
+
+/* --------------------------------------------------------------------------
+   15. Modern Console Viewer (Live Logs)
+   -------------------------------------------------------------------------- */
+.mars-modern-console {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: var(--mars-radius-lg);
+  overflow: hidden;
+  background-color: var(--mars-color-surface);
+  border: 1px solid var(--mars-color-border);
+}
+
+.mars-modern-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mars-space-3) var(--mars-space-4);
+  background-color: var(--mars-color-surface-raised);
+  border-bottom: 1px solid var(--mars-color-border);
+  flex-shrink: 0;
+}
+
+.mars-modern-console-body {
+  flex: 1;
+  overflow-y: auto;
+  background-color: var(--mars-color-surface-sunken);
+  padding: var(--mars-space-3);
+  font-family: var(--mars-font-mono);
+  font-size: var(--mars-text-xs);
+}
+
+.mars-console-entry {
+  display: flex;
+  gap: var(--mars-space-3);
+  padding: var(--mars-space-2);
+  margin-bottom: var(--mars-space-1);
+  border-radius: var(--mars-radius-sm);
+  border: 1px solid transparent;
+  transition: all var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-console-entry:hover {
+  border-color: var(--mars-color-border);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.mars-console-entry-level {
+  font-weight: var(--mars-font-bold);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.mars-console-entry-message {
+  flex: 1;
+  color: var(--mars-color-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.mars-console-entry-time {
+  color: var(--mars-color-text-tertiary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.mars-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mars-space-1);
+  padding: var(--mars-space-1) var(--mars-space-2);
+  border-radius: var(--mars-radius-sm);
+  font-size: var(--mars-text-xs);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+}
+
+.mars-live-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #EF4444;
+  animation: mars-pulse 1.5s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   16. Modern Artifacts Viewer
+   -------------------------------------------------------------------------- */
+.mars-modern-artifacts {
+  border-radius: var(--mars-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--mars-color-border);
+  background-color: var(--mars-color-surface);
+}
+
+.mars-artifacts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mars-space-3) var(--mars-space-4);
+  background-color: var(--mars-color-surface-raised);
+  border-bottom: 1px solid var(--mars-color-border);
+}
+
+.mars-artifacts-group {
+  border-bottom: 1px solid var(--mars-color-border);
+}
+
+.mars-artifacts-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mars-space-2) var(--mars-space-4);
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: background-color var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-artifacts-group-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.mars-artifacts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mars-space-2) var(--mars-space-4);
+  border-bottom: 1px solid var(--mars-color-border-subtle);
+  transition: background-color var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-artifacts-item:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.mars-artifacts-item-info {
+  display: flex;
+  align-items: center;
+  gap: var(--mars-space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.mars-artifacts-item-name {
+  font-size: var(--mars-text-sm);
+  color: var(--mars-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mars-artifacts-item-size {
+  font-size: var(--mars-text-xs);
+  color: var(--mars-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.mars-artifacts-item-actions {
+  display: flex;
+  gap: var(--mars-space-1);
+  opacity: 0;
+  transition: opacity var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-artifacts-item:hover .mars-artifacts-item-actions {
+  opacity: 1;
+}
+
+.mars-artifacts-item-action {
+  padding: var(--mars-space-1);
+  border-radius: var(--mars-radius-sm);
+  color: var(--mars-color-text-secondary);
+  cursor: pointer;
+  transition: all var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-artifacts-item-action:hover {
+  background-color: var(--mars-color-surface-overlay);
+  color: var(--mars-color-primary);
 }

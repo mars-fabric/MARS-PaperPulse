@@ -2,6 +2,7 @@ export { default as FilePreview } from './FilePreview'
 export { default as CodeViewer } from './CodeViewer'
 export { default as CSVTableViewer } from './CSVTableViewer'
 export { default as MarkdownRenderer } from './MarkdownRenderer'
+export { default as FilePreviewModal } from './FilePreviewModal'
 export {
   getFileIconConfig,
   getOpenDirectoryIcon,

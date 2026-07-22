@@ -10,7 +10,9 @@ import LoginModal from '@/components/auth/LoginModal'
 import SignupModal from '@/components/auth/SignupModal'
 import PendingApproval from '@/components/auth/PendingApproval'
 import UserMenu from '@/components/layout/UserMenu'
+import SimpleDashboardLanding from '@/components/dashboard/SimpleDashboardLanding'
 import { useAuth } from '@/contexts/AuthContext'
+import { useResizableSidebar } from '@/hooks/useResizableSidebar'
 import { apiCall } from '@/lib/api'
 
 export default function Home() {
@@ -86,106 +88,289 @@ function PublicAuthLanding({
 }) {
   return (
     <div
-      className="h-full overflow-auto px-4 py-8 sm:px-6 md:px-10 md:py-10"
+      className="h-full overflow-auto px-4 py-6 sm:px-6 md:px-8 md:py-8"
       style={{
-        background:
-          'radial-gradient(900px 420px at 82% -5%, rgba(34, 211, 238, 0.2), transparent), radial-gradient(840px 380px at 8% 100%, rgba(251, 146, 60, 0.18), transparent), linear-gradient(160deg, #020617 0%, #071123 45%, #031525 100%)',
+        background: `
+          radial-gradient(1200px 600px at 20% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+          radial-gradient(1000px 800px at 80% 100%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+          linear-gradient(135deg, #0F172A 0%, #111827 30%, #0B1220 60%, #1a0f3d 100%)
+        `,
+        minHeight: '100vh',
       }}
     >
-      <div className="mx-auto w-full max-w-6xl">
-        <div className="grid items-stretch gap-6 md:grid-cols-[1.15fr_0.85fr]">
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8">
-            <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 -left-16 h-52 w-52 rounded-full bg-orange-400/20 blur-3xl" />
+      <div className="mx-auto w-full max-w-7xl">
+        {/* Navigation Bar */}
+        <div className="mb-12 sm:mb-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
+            >
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold" style={{ color: '#F9FAFB' }}>
+                MARS PaperPulse
+              </h1>
+              <p className="text-[10px] sm:text-xs" style={{ color: 'rgba(107, 114, 128, 1)' }}>
+                AI Research Assistant
+              </p>
+            </div>
+          </div>
+        </div>
 
-            <div className="relative space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-300/10 px-3 py-1 text-xs font-semibold tracking-wide text-cyan-100">
-                <Sparkles className="h-3.5 w-3.5" />
-                MARS PaperPulse Platform
-              </div>
+        {/* Main Content Grid */}
+        <div className="grid items-start gap-6 md:grid-cols-[1.3fr_1fr] lg:gap-8">
+          {/* Left: Hero Section */}
+          <section className="space-y-8">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 rounded-full border px-3.5 py-2 backdrop-blur-sm"
+              style={{
+                borderColor: 'rgba(59, 130, 246, 0.3)',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3B82F6' }} />
+              <span className="text-xs font-medium" style={{ color: 'rgba(147, 197, 253, 1)' }}>
+                Powered by Advanced AI
+              </span>
+            </div>
 
-              <div className="space-y-3">
-                <h1 className="text-3xl font-bold leading-tight text-white sm:text-5xl">
-                  From Raw Evidence to Publishable Insight
-                </h1>
-                <p className="max-w-2xl text-sm text-slate-200/90 sm:text-base">
-                  Operate complex research as a guided multi-stage system with transparent outputs, review checkpoints, and ready-to-share reports.
-                </p>
-              </div>
+            {/* Main Headline */}
+            <div className="space-y-4">
+              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tighter"
+                style={{ color: '#F9FAFB' }}
+              >
+                From Data to{' '}
+                <span style={{
+                  background: 'linear-gradient(120deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                  Research Papers
+                </span>
+              </h2>
+              <p className="text-base sm:text-lg leading-relaxed max-w-2xl"
+                style={{ color: 'rgba(203, 213, 225, 0.9)' }}
+              >
+                Automate your entire research workflow. Upload data, generate ideas, develop methodology, run experiments, and produce publication-ready LaTeX papers—all guided by intelligent AI orchestration.
+              </p>
+            </div>
 
-              <div className="grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-3.5 text-slate-100 transition-transform duration-200 hover:-translate-y-0.5">
-                  <div className="mb-1.5 flex items-center gap-2 text-cyan-200">
-                    <Layers3 className="h-4 w-4" />
-                    5-Stage Pipeline
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <button
+                onClick={onSignIn}
+                className="group flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg text-sm font-semibold text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.35)',
+                }}
+              >
+                <span>Sign In</span>
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              </button>
+              <button
+                onClick={onSignUp}
+                className="flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg text-sm font-semibold transition-all duration-200"
+                style={{
+                  color: '#F9FAFB',
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                }}
+              >
+                <span>Create Account</span>
+              </button>
+            </div>
+
+            {/* Key Features Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-8">
+              {[
+                {
+                  icon: Sparkles,
+                  title: '5-Stage Pipeline',
+                  desc: 'Automated workflow from data to publication',
+                  color: 'rgba(139, 92, 246, 1)',
+                },
+                {
+                  icon: Layers3,
+                  title: 'Multi-LLM Support',
+                  desc: 'GPT-4, Claude, and more options',
+                  color: 'rgba(34, 197, 94, 1)',
+                },
+                {
+                  icon: BadgeCheck,
+                  title: 'Admin Governance',
+                  desc: 'Controlled access with approval workflow',
+                  color: 'rgba(59, 130, 246, 1)',
+                },
+                {
+                  icon: Activity,
+                  title: 'Real-time Tracking',
+                  desc: 'Monitor progress and view outputs live',
+                  color: 'rgba(245, 158, 11, 1)',
+                },
+              ].map((feature, idx) => {
+                const FeatureIcon = feature.icon
+                return (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-lg border backdrop-blur-sm group hover:border-opacity-100 transition-all"
+                    style={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                      borderColor: 'rgba(255, 255, 255, 0.1)',
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{
+                          backgroundColor: `${feature.color}15`,
+                        }}
+                      >
+                        <FeatureIcon className="w-4 h-4" style={{ color: feature.color }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold" style={{ color: '#F9FAFB' }}>
+                          {feature.title}
+                        </h3>
+                        <p className="text-xs mt-1 leading-snug" style={{ color: 'rgba(156, 163, 175, 1)' }}>
+                          {feature.desc}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  Structured execution from ingestion through report packaging.
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Right: Auth Card */}
+          <section>
+            <div
+              className="rounded-xl border shadow-2xl overflow-hidden backdrop-blur-xl sticky top-6"
+              style={{
+                backgroundColor: 'rgba(20, 28, 47, 0.7)',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              <div className="p-6 sm:p-8">
+                {/* Header */}
+                <div className="mb-6">
+                  <h2 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: '#F9FAFB' }}>
+                    Welcome Back
+                  </h2>
+                  <p className="text-sm" style={{ color: 'rgba(156, 163, 175, 1)' }}>
+                    Sign in to your research workspace or request access today.
+                  </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-3.5 text-slate-100 transition-transform duration-200 hover:-translate-y-0.5">
-                  <div className="mb-1.5 flex items-center gap-2 text-emerald-200">
-                    <BadgeCheck className="h-4 w-4" />
-                    Review-Ready
-                  </div>
-                  Consistent outputs with audit-friendly status tracking.
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-3.5 text-slate-100 transition-transform duration-200 hover:-translate-y-0.5">
-                  <div className="mb-1.5 flex items-center gap-2 text-orange-200">
-                    <Activity className="h-4 w-4" />
-                    Observability
-                  </div>
-                  Tracing support for reproducible, explainable workflows.
-                </div>
-              </div>
 
-              <div className="rounded-2xl border border-cyan-200/20 bg-slate-950/35 p-4">
-                <div className="grid gap-3 text-xs text-slate-200 sm:grid-cols-3 sm:text-sm">
-                  <div>
-                    <p className="text-cyan-200">Adaptive Orchestration</p>
-                    <p className="mt-0.5 text-slate-300">Task-aware routing across the research lifecycle.</p>
+                {/* Signup Notice */}
+                {signupNotice && (
+                  <div
+                    className="mb-6 p-4 rounded-lg border text-sm"
+                    style={{
+                      backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                      borderColor: 'rgba(34, 197, 94, 0.3)',
+                      color: 'rgba(134, 239, 172, 1)',
+                    }}
+                  >
+                    ✓ {signupNotice}
                   </div>
-                  <div>
-                    <p className="text-emerald-200">Human-in-the-Loop</p>
-                    <p className="mt-0.5 text-slate-300">Admin approval and governance for account access.</p>
-                  </div>
-                  <div>
-                    <p className="text-orange-200">Publication Outputs</p>
-                    <p className="mt-0.5 text-slate-300">Auto-generated report artifacts and summaries.</p>
-                  </div>
+                )}
+
+                {/* Auth Buttons */}
+                <div className="space-y-3">
+                  <button
+                    onClick={onSignIn}
+                    className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:shadow-lg"
+                    style={{
+                      background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                      boxShadow: '0 4px 16px rgba(99, 102, 241, 0.25)',
+                    }}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={onSignUp}
+                    className="w-full py-3 rounded-lg text-sm font-semibold border transition-all duration-200"
+                    style={{
+                      color: '#F9FAFB',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      borderColor: 'rgba(255, 255, 255, 0.15)',
+                    }}
+                  >
+                    Create New Account
+                  </button>
+                </div>
+
+                {/* Divider */}
+                <div className="my-6" style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', height: '1px' }} />
+
+                {/* Info Cards */}
+                <div className="space-y-3">
+                  {[
+                    { icon: '⚡', title: 'Quick Setup', desc: 'Get started in minutes' },
+                    { icon: '🔒', title: 'Secure', desc: 'Enterprise-grade encryption' },
+                    { icon: '📊', title: 'Scalable', desc: 'Handle any project size' },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex gap-3">
+                      <span className="text-lg flex-shrink-0">{item.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium" style={{ color: '#F9FAFB' }}>
+                          {item.title}
+                        </p>
+                        <p className="text-[11px]" style={{ color: 'rgba(156, 163, 175, 1)' }}>
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer Note */}
+                <div
+                  className="mt-6 pt-6 text-center text-xs border-t"
+                  style={{
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'rgba(107, 114, 128, 1)',
+                  }}
+                >
+                  New accounts require admin approval before access is granted.
                 </div>
               </div>
             </div>
           </section>
+        </div>
 
-          <aside className="rounded-3xl border border-white/10 bg-slate-900/85 p-6 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur md:p-7">
-            <h2 className="text-2xl font-semibold text-white">Welcome</h2>
-            <p className="mt-1.5 text-sm text-slate-300">Sign in to continue your research workspace, or request a new account.</p>
-
-            {signupNotice && (
-              <div className="mt-4 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                {signupNotice}
+        {/* Bottom Stats */}
+        <div className="mt-16 sm:mt-24 pt-12 border-t grid grid-cols-2 sm:grid-cols-4 gap-8"
+          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+        >
+          {[
+            { label: '5', desc: 'Research Stages' },
+            { label: '10+', desc: 'LLM Providers' },
+            { label: '100%', desc: 'Automated' },
+            { label: '∞', desc: 'Scalable' },
+          ].map((stat, idx) => (
+            <div key={idx} className="text-center">
+              <div
+                className="text-2xl sm:text-3xl font-bold"
+                style={{
+                  background: 'linear-gradient(120deg, #8b5cf6, #6366f1)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                {stat.label}
               </div>
-            )}
-
-            <div className="mt-6 space-y-3">
-              <button
-                onClick={onSignIn}
-                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-900/35 transition-all duration-200 hover:scale-[1.01] hover:from-cyan-400 hover:via-sky-400 hover:to-blue-400"
-              >
-                Sign In
-                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-              </button>
-              <button
-                onClick={onSignUp}
-                className="w-full rounded-xl border border-slate-600 bg-slate-800/75 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700/80"
-              >
-                Create Account
-              </button>
+              <p className="text-xs sm:text-sm mt-2" style={{ color: 'rgba(156, 163, 175, 1)' }}>
+                {stat.desc}
+              </p>
             </div>
-
-            <div className="mt-6 rounded-xl border border-slate-700/70 bg-slate-800/45 p-3.5 text-xs text-slate-300">
-              New accounts are reviewed by an administrator before access is granted.
-            </div>
-          </aside>
+          ))}
         </div>
       </div>
     </div>
@@ -199,6 +384,7 @@ function MainApp() {
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [showTask, setShowTask] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const { width, startResizing, containerRef } = useResizableSidebar()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Auto-collapse sidebar on small screens
@@ -276,7 +462,7 @@ function MainApp() {
               resumeTaskId={activeTaskId}
             />
           ) : (
-            <WelcomeView onNewSession={handleNewSession} />
+            <SimpleDashboardLanding onNewSession={handleNewSession} />
           )}
 
           {/* Sidebar toggle */}
@@ -291,16 +477,22 @@ function MainApp() {
           </button>
         </div>
 
-        {/* Right Sidebar */}
+        {/* Right Sidebar - with resizable container */}
         <div
-          className="transition-all duration-300 ease-in-out overflow-hidden"
-          style={{ width: sidebarOpen ? '280px' : '0px', minWidth: sidebarOpen ? '280px' : '0px' }}
+          ref={containerRef}
+          className="transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0"
+          style={{ 
+            width: sidebarOpen ? `${width}px` : '0px', 
+            minWidth: sidebarOpen ? `${width}px` : '0px',
+          }}
         >
           <SessionSidebar
             sessions={sessions}
             activeSessionId={activeTaskId}
             onSelectSession={handleSelectSession}
             onDeleteSession={handleDeleteSession}
+            width={width}
+            onStartResize={startResizing}
           />
         </div>
       </div>
@@ -308,55 +500,201 @@ function MainApp() {
   )
 }
 
-// ─── Welcome View ───
+// ─── Welcome View (Legacy - kept for reference) ───
+// Now using SimpleDashboardLanding instead
 
-function WelcomeView({ onNewSession }: { onNewSession: () => void }) {
+function WelcomeView_DEPRECATED({ onNewSession }: { onNewSession: () => void }) {
   return (
-    <div className="h-full flex items-center justify-center p-8">
-      <div className="max-w-lg w-full text-center">
-        <div
-          className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center"
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%)',
-            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
-          }}
-        >
-          <Sparkles className="w-10 h-10 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--mars-color-text)' }}>
-          PaperPulse
-        </h2>
-        <p className="text-sm mb-8" style={{ color: 'var(--mars-color-text-secondary)' }}>
-          Generate deep scientific research papers through AI-powered interactive stages
-        </p>
-        <button
-          onClick={onNewSession}
-          className="inline-flex items-center gap-3 px-6 py-3 rounded-xl text-sm font-semibold
-            text-white transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-            boxShadow: '0 4px 16px rgba(99, 102, 241, 0.3)',
-          }}
-        >
-          <FileText className="w-5 h-5" />
-          Start New Research
-        </button>
-        <div className="grid grid-cols-3 gap-4 mt-10">
-          {[
-            { icon: Upload, label: 'Upload Data', desc: 'CSV, PDF, Text files' },
-            { icon: Sparkles, label: 'AI Stages', desc: '4-phase pipeline' },
-            { icon: FileText, label: 'LaTeX Paper', desc: 'Publication ready' },
-          ].map((feature) => (
-            <div
-              key={feature.label}
-              className="p-3 rounded-xl"
-              style={{ backgroundColor: 'var(--mars-color-surface)', border: '1px solid var(--mars-color-border)' }}
-            >
-              <feature.icon className="w-5 h-5 mx-auto mb-1.5" style={{ color: 'var(--mars-color-text-tertiary)' }} />
-              <p className="text-xs font-medium" style={{ color: 'var(--mars-color-text)' }}>{feature.label}</p>
-              <p className="text-[10px]" style={{ color: 'var(--mars-color-text-tertiary)' }}>{feature.desc}</p>
+    <div
+      className="h-full flex items-center justify-center p-6 sm:p-8"
+      style={{
+        background: 'linear-gradient(135deg, #0F172A 0%, #111827 25%, #0B1220 50%, #1F0F3D 100%)',
+        position: 'relative',
+      }}
+    >
+      {/* Animated background gradients */}
+      <div
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+        style={{
+          background: `
+            radial-gradient(900px 420px at 82% -5%, rgba(99, 102, 241, 0.15), transparent),
+            radial-gradient(840px 380px at 8% 100%, rgba(139, 92, 246, 0.12), transparent)
+          `,
+        }}
+      />
+
+      <div className="relative z-10 max-w-5xl w-full">
+        {/* Main Grid */}
+        <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
+          {/* Left Section - Content */}
+          <section className="space-y-8">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 backdrop-blur-sm">
+              <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span
+                className="text-sm font-medium"
+                style={{ color: 'rgba(147, 197, 253, 1)' }}
+              >
+                AI-Powered Research Platform
+              </span>
             </div>
-          ))}
+
+            {/* Heading */}
+            <div className="space-y-4">
+              <h1
+                className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tight"
+                style={{ color: '#F9FAFB' }}
+              >
+                From Data to{' '}
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Discovery
+                </span>
+              </h1>
+              <p
+                className="text-lg sm:text-xl text-slate-200/80 leading-relaxed max-w-2xl"
+              >
+                Transform complex research into publication-ready papers through our intelligent 5-stage pipeline. Upload data, refine methods, execute experiments, and generate LaTeX-formatted reports—all in one place.
+              </p>
+            </div>
+
+            {/* CTA Button */}
+            <button
+              onClick={onNewSession}
+              className="group flex items-center gap-3 px-8 py-3.5 rounded-lg text-base font-semibold text-white shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)',
+              }}
+            >
+              <FileText className="w-5 h-5" />
+              Start New Research
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </button>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-4 pt-4">
+              {[
+                { label: '5 Stages', value: '100% Automated' },
+                { label: 'Multiple LLMs', value: 'GPT-4 & More' },
+                { label: 'LaTeX Output', value: 'Publication Ready' },
+              ].map((stat) => (
+                <div key={stat.label} className="space-y-1">
+                  <div
+                    className="text-sm font-semibold"
+                    style={{ color: '#8b5cf6' }}
+                  >
+                    {stat.label}
+                  </div>
+                  <div
+                    className="text-xs"
+                    style={{ color: 'rgba(107, 114, 128, 1)' }}
+                  >
+                    {stat.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Right Section - Features Card */}
+          <section
+            className="rounded-2xl border overflow-hidden shadow-2xl backdrop-blur-xl"
+            style={{
+              backgroundColor: 'rgba(20, 28, 47, 0.7)',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+            }}
+          >
+            <div
+              className="px-6 sm:px-8 py-8 space-y-6"
+            >
+              <h2
+                className="text-2xl font-bold"
+                style={{ color: '#F9FAFB' }}
+              >
+                Platform Highlights
+              </h2>
+
+              {/* Feature List */}
+              <div className="space-y-4">
+                {[
+                  {
+                    icon: Sparkles,
+                    title: 'Intelligent Orchestration',
+                    desc: 'AI-guided research workflow with human review checkpoints',
+                    color: 'rgba(139, 92, 246, 1)',
+                  },
+                  {
+                    icon: Layers3,
+                    title: '5-Stage Pipeline',
+                    desc: 'Idea generation → Methods → Experiments → Report → LaTeX',
+                    color: 'rgba(34, 197, 94, 1)',
+                  },
+                  {
+                    icon: Activity,
+                    title: 'Real-time Tracking',
+                    desc: 'Monitor execution progress and artifact generation',
+                    color: 'rgba(245, 158, 11, 1)',
+                  },
+                  {
+                    icon: BadgeCheck,
+                    title: 'Governance Ready',
+                    desc: 'Admin approval system for controlled access',
+                    color: 'rgba(59, 130, 246, 1)',
+                  },
+                ].map((feature, idx) => {
+                  const FeatureIcon = feature.icon
+                  return (
+                    <div key={idx} className="flex gap-4">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{
+                          backgroundColor: `${feature.color}20`,
+                        }}
+                      >
+                        <FeatureIcon
+                          className="w-5 h-5"
+                          style={{ color: feature.color }}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3
+                          className="font-medium text-sm"
+                          style={{ color: '#F9FAFB' }}
+                        >
+                          {feature.title}
+                        </h3>
+                        <p
+                          className="text-xs mt-0.5 leading-snug"
+                          style={{ color: 'rgba(156, 163, 175, 1)' }}
+                        >
+                          {feature.desc}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Footer Note */}
+              <div
+                className="mt-6 pt-6 border-t"
+                style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                <p
+                  className="text-xs text-center"
+                  style={{ color: 'rgba(107, 114, 128, 1)' }}
+                >
+                  New to PaperPulse? Account requests are reviewed by administrators.
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

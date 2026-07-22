@@ -6,6 +6,8 @@ import logging
 import os
 from typing import Any, Dict
 
+from services.tracing_bridge import filter_langchain_callbacks as _filter_langchain_callbacks
+
 logger = logging.getLogger(__name__)
 
 # Path to images_to_use/ resolved relative to this file at import time
@@ -22,6 +24,7 @@ async def run_report_pipeline(
     llm_max_tokens: int = 8192,
     keys: Any = None,
     images_dir: str = "",
+    callbacks: Any = None,  # ← ACCEPT CALLBACKS FOR TRACING
 ) -> Dict[str, Any]:
     """Run the full Stage 5 report pipeline and return a result dict.
 
@@ -64,6 +67,18 @@ async def run_report_pipeline(
         "configurable": {"thread_id": "report-stage5"},
         "recursion_limit": 50,
     }
+
+    # NOTE: cmbagent's ``WorkflowCallbacks`` is NOT a LangChain callback handler
+    # and must never be placed in ``config["callbacks"]`` — LangGraph/LangChain
+    # expect BaseCallbackHandler instances there and will raise
+    # ``AttributeError: 'WorkflowCallbacks' object has no attribute 'parent_run_id'``.
+    # Stage 4-5 LLM calls are traced to Langfuse via the global OpenInference
+    # LangChain instrumentor (see services/tracing_bridge.instrument_langchain),
+    # so no per-invocation callback injection is required here. Only forward
+    # genuine LangChain BaseCallbackHandler instances if any are provided.
+    lc_callbacks = _filter_langchain_callbacks(callbacks)
+    if lc_callbacks:
+        langgraph_config["callbacks"] = lc_callbacks
 
     try:
         graph = build_report_graph()

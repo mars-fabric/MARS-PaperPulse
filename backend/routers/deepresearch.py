@@ -665,7 +665,11 @@ async def execute_stage(
 
     # Set per-task trace context BEFORE creating the asyncio task so the
     # worker thread (via asyncio.to_thread) inherits the contextvar values.
-    trace_tokens = set_task_trace_context(task_id, current_user.id)
+    trace_tokens = set_task_trace_context(
+        task_id, current_user.id,
+        stage_num=stage_num,
+        stage_name=STAGE_DEFS[stage_num - 1]["name"],
+    )
 
     # Write audit entry for stage execution start (use auth_db so tests work)
     write_audit(
@@ -719,7 +723,11 @@ async def _run_phase(
 
     # Re-apply trace context (asyncio.to_thread workers inherit contextvars,
     # but the asyncio task itself also needs it for direct awaits).
-    trace_tokens = set_task_trace_context(task_id, user_id)
+    trace_tokens = set_task_trace_context(
+        task_id, user_id,
+        stage_num=stage_num,
+        stage_name=sdef["name"],
+    )
     tracer = get_tracer("paperpulse.stages")
 
     try:
@@ -822,6 +830,132 @@ async def _run_phase(
         asyncio.create_task(_delayed_buffer_cleanup(buf_key))
 
 
+def _build_workflow_callbacks(
+    task_id: str,
+    stage_num: int,
+    sdef: dict,
+    db_session,
+):
+    """Build workflow callbacks for tracing/logging (used by stages 1-5).
+
+    Returns: (cost_collector, event_repo, workflow_callbacks) tuple.
+    """
+    from cmbagent.callbacks import merge_callbacks, create_print_callbacks, WorkflowCallbacks
+
+    cost_collector = None
+    event_repo = None
+    execution_order = [0]
+
+    try:
+        from execution.cost_collector import CostCollector
+        cost_collector = CostCollector(
+            db_session=db_session,
+            session_id=_get_session_id_for_task(task_id, db_session),
+            run_id=task_id,
+        )
+    except Exception as exc:
+        logger.warning("deepresearch_cost_collector_init_failed error=%s", exc)
+
+    try:
+        from cmbagent.database.repository import EventRepository
+        event_repo = EventRepository(db_session, _get_session_id_for_task(task_id, db_session))
+    except Exception as exc:
+        logger.warning("deepresearch_event_repo_init_failed error=%s", exc)
+
+    def on_agent_msg(agent, role, content, metadata):
+        if not event_repo:
+            return
+        try:
+            execution_order[0] += 1
+            event_repo.create_event(
+                run_id=task_id,
+                event_type="agent_call",
+                execution_order=execution_order[0],
+                agent_name=agent,
+                status="completed",
+                inputs={"role": role, "message": (content or "")[:500]},
+                outputs={"full_content": (content or "")[:3000]},
+                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
+            )
+        except Exception as exc:
+            logger.debug("deepresearch_event_create_failed error=%s", exc)
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+    def on_code_exec(agent, code, language, result):
+        if not event_repo:
+            return
+        try:
+            execution_order[0] += 1
+            event_repo.create_event(
+                run_id=task_id,
+                event_type="code_exec",
+                execution_order=execution_order[0],
+                agent_name=agent,
+                status="completed",
+                inputs={"language": language, "code": (code or "")[:2000]},
+                outputs={"result": (str(result) if result else "")[:2000]},
+                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
+            )
+        except Exception as exc:
+            logger.debug("deepresearch_code_event_failed error=%s", exc)
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+    def on_tool(agent, tool_name, arguments, result):
+        if not event_repo:
+            return
+        try:
+            import json as _json
+            execution_order[0] += 1
+            args_str = _json.dumps(arguments, default=str)[:500] if isinstance(arguments, dict) else str(arguments)[:500]
+            event_repo.create_event(
+                run_id=task_id,
+                event_type="tool_call",
+                execution_order=execution_order[0],
+                agent_name=agent,
+                status="completed",
+                inputs={"tool": tool_name, "args": args_str},
+                outputs={"result": (str(result) if result else "")[:2000]},
+                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
+            )
+        except Exception as exc:
+            logger.debug("deepresearch_tool_event_failed error=%s", exc)
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+    def on_cost_update(cost_data):
+        if cost_collector:
+            try:
+                cost_collector.collect_from_callback(cost_data)
+            except Exception as exc:
+                logger.debug("deepresearch_cost_callback_failed error=%s", exc)
+                try:
+                    db_session.rollback()
+                except Exception:
+                    pass
+
+    event_tracking_callbacks = WorkflowCallbacks(
+        on_agent_message=on_agent_msg,
+        on_code_execution=on_code_exec,
+        on_tool_call=on_tool,
+        on_cost_update=on_cost_update,
+    )
+
+    workflow_callbacks = merge_callbacks(
+        create_print_callbacks(),
+        event_tracking_callbacks,
+    )
+
+    return cost_collector, event_repo, workflow_callbacks
+
+
 async def _run_planning_control_stage(
     task_id: str,
     stage_num: int,
@@ -846,117 +980,7 @@ async def _run_planning_control_stage(
     db = _get_db()
     session_id = _get_session_id_for_task(task_id, db)
 
-    cost_collector = None
-    event_repo = None
-    try:
-        from execution.cost_collector import CostCollector
-        cost_collector = CostCollector(
-            db_session=db,
-            session_id=session_id,
-            run_id=task_id,
-        )
-    except Exception as exc:
-        logger.warning("deepresearch_cost_collector_init_failed error=%s", exc)
-
-    try:
-        from cmbagent.database.repository import EventRepository
-        event_repo = EventRepository(db, session_id)
-    except Exception as exc:
-        logger.warning("deepresearch_event_repo_init_failed error=%s", exc)
-
-    # ── 2. Build event tracking callbacks ──
-    execution_order = [0]  # mutable counter for ordering
-
-    def on_agent_msg(agent, role, content, metadata):
-        if not event_repo:
-            return
-        try:
-            execution_order[0] += 1
-            event_repo.create_event(
-                run_id=task_id,
-                event_type="agent_call",
-                execution_order=execution_order[0],
-                agent_name=agent,
-                status="completed",
-                inputs={"role": role, "message": (content or "")[:500]},
-                outputs={"full_content": (content or "")[:3000]},
-                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
-            )
-        except Exception as exc:
-            logger.debug("deepresearch_event_create_failed error=%s", exc)
-            try:
-                db.rollback()
-            except Exception:
-                pass
-
-    def on_code_exec(agent, code, language, result):
-        if not event_repo:
-            return
-        try:
-            execution_order[0] += 1
-            event_repo.create_event(
-                run_id=task_id,
-                event_type="code_exec",
-                execution_order=execution_order[0],
-                agent_name=agent,
-                status="completed",
-                inputs={"language": language, "code": (code or "")[:2000]},
-                outputs={"result": (str(result) if result else "")[:2000]},
-                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
-            )
-        except Exception as exc:
-            logger.debug("deepresearch_code_event_failed error=%s", exc)
-            try:
-                db.rollback()
-            except Exception:
-                pass
-
-    def on_tool(agent, tool_name, arguments, result):
-        if not event_repo:
-            return
-        try:
-            import json as _json
-            execution_order[0] += 1
-            args_str = _json.dumps(arguments, default=str)[:500] if isinstance(arguments, dict) else str(arguments)[:500]
-            event_repo.create_event(
-                run_id=task_id,
-                event_type="tool_call",
-                execution_order=execution_order[0],
-                agent_name=agent,
-                status="completed",
-                inputs={"tool": tool_name, "args": args_str},
-                outputs={"result": (str(result) if result else "")[:2000]},
-                meta={"stage_num": stage_num, "stage_name": sdef["name"]},
-            )
-        except Exception as exc:
-            logger.debug("deepresearch_tool_event_failed error=%s", exc)
-            try:
-                db.rollback()
-            except Exception:
-                pass
-
-    def on_cost_update(cost_data):
-        if cost_collector:
-            try:
-                cost_collector.collect_from_callback(cost_data)
-            except Exception as exc:
-                logger.debug("deepresearch_cost_callback_failed error=%s", exc)
-                try:
-                    db.rollback()
-                except Exception:
-                    pass
-
-    event_tracking_callbacks = WorkflowCallbacks(
-        on_agent_message=on_agent_msg,
-        on_code_execution=on_code_exec,
-        on_tool_call=on_tool,
-        on_cost_update=on_cost_update,
-    )
-
-    workflow_callbacks = merge_callbacks(
-        create_print_callbacks(),
-        event_tracking_callbacks,
-    )
+    cost_collector, event_repo, workflow_callbacks = _build_workflow_callbacks(task_id, stage_num, sdef, db)
 
     # ── 3. Build stage-specific kwargs ──
     data_description = shared_state.get("data_description") or task_description
@@ -1111,10 +1135,17 @@ async def _run_paper_stage(
     shared_state: Dict[str, Any],
     config_overrides: Dict[str, Any],
 ):
-    """Run stage 4 (paper generation) using DeepresearchPaperPhase (LangGraph)."""
+    """Run stage 4 (paper generation) using DeepresearchPaperPhase (LangGraph).
+    
+    Sets up callbacks for tracing/logging before execution.
+    """
     from task_framework.phases.paper import DeepresearchPaperPhase, DeepresearchPaperPhaseConfig
     from cmbagent.phases.base import PhaseContext, PhaseStatus
     from cmbagent.config.model_registry import get_model_registry
+
+    # ── 1. Build callbacks for tracing/logging ──
+    db = _get_db()
+    cost_collector, event_repo, workflow_callbacks = _build_workflow_callbacks(task_id, stage_num, sdef, db)
 
     stage_defaults = get_model_registry().get_stage_defaults("deepresearch", 4)
     # Strip empty/None UI selections so they don't clobber provider-profile
@@ -1127,6 +1158,7 @@ async def _run_paper_stage(
     config_kwargs = {"parent_run_id": task_id, **stage_defaults, **cleaned_overrides}
     phase = DeepresearchPaperPhase(DeepresearchPaperPhaseConfig(**config_kwargs))
 
+    # ── 2. Create context WITH callbacks for tracing ──
     context = PhaseContext(
         workflow_id=f"deepresearch-{task_id}",
         run_id=task_id,
@@ -1135,7 +1167,7 @@ async def _run_paper_stage(
         work_dir=work_dir,
         shared_state=shared_state,
         api_keys={},
-        callbacks=None,
+        callbacks=workflow_callbacks,  # ← NOW PASSING CALLBACKS
     )
 
     with _console_lock:
@@ -1155,10 +1187,10 @@ async def _run_paper_stage(
         _active_buf_key.set(None)
 
     # Persist result to DB
-    db = _get_db()
+    persist_db = _get_db()
     try:
-        sid = _get_session_id_for_task(task_id, db)
-        repo = _get_stage_repo(db, session_id=sid)
+        sid = _get_session_id_for_task(task_id, persist_db)
+        repo = _get_stage_repo(persist_db, session_id=sid)
         stages = repo.list_stages(parent_run_id=task_id)
         stage = next((s for s in stages if s.stage_number == stage_num), None)
         if stage:
@@ -1179,7 +1211,7 @@ async def _run_paper_stage(
                 refreshed = repo.list_stages(parent_run_id=task_id)
                 if all(s.status == "completed" for s in refreshed):
                     from cmbagent.database.models import WorkflowRun as _WR2
-                    parent = db.query(_WR2).filter(_WR2.id == task_id).first()
+                    parent = persist_db.query(_WR2).filter(_WR2.id == task_id).first()
                     if parent:
                         parent.status = "completed"
             else:
@@ -1193,9 +1225,16 @@ async def _run_paper_stage(
                     _console_buffers.setdefault(buf_key, []).append(
                         f"Stage {stage_num} failed: {result.error}"
                     )
-        db.commit()
+        persist_db.commit()
     finally:
-        db.close()
+        persist_db.close()
+    
+    # Clean up callbacks
+    if cost_collector:
+        try:
+            cost_collector.flush()
+        except Exception as exc:
+            logger.debug("cost_collector_flush_failed error=%s", exc)
 
 
 async def _run_report_stage(
@@ -1208,9 +1247,16 @@ async def _run_report_stage(
     shared_state: Dict[str, Any],
     config_overrides: Dict[str, Any],
 ):
-    """Run stage 5 (enhanced PDF report) using the report_agents LangGraph."""
+    """Run stage 5 (enhanced PDF report) using the report_agents LangGraph.
+    
+    Sets up callbacks for tracing/logging before execution.
+    """
     from task_framework.phases.report import DeepresearchReportPhase, DeepresearchReportPhaseConfig
     from cmbagent.phases.base import PhaseContext, PhaseStatus
+
+    # ── 1. Build callbacks for tracing/logging ──
+    db = _get_db()
+    cost_collector, event_repo, workflow_callbacks = _build_workflow_callbacks(task_id, stage_num, sdef, db)
 
     cleaned_overrides = {
         k: v for k, v in (config_overrides or {}).items()
@@ -1228,6 +1274,7 @@ async def _run_report_stage(
 
     phase = DeepresearchReportPhase(DeepresearchReportPhaseConfig(**config_kwargs))
 
+    # ── 2. Create context WITH callbacks for tracing ──
     context = PhaseContext(
         workflow_id=f"deepresearch-{task_id}",
         run_id=task_id,
@@ -1236,7 +1283,7 @@ async def _run_report_stage(
         work_dir=work_dir,
         shared_state=shared_state,
         api_keys={},
-        callbacks=None,
+        callbacks=workflow_callbacks,  # ← NOW PASSING CALLBACKS
     )
 
     with _console_lock:
@@ -1253,10 +1300,10 @@ async def _run_report_stage(
         _active_buf_key.set(None)
 
     # Persist result to DB (mirrors _run_paper_stage)
-    db = _get_db()
+    persist_db = _get_db()
     try:
-        sid = _get_session_id_for_task(task_id, db)
-        repo = _get_stage_repo(db, session_id=sid)
+        sid = _get_session_id_for_task(task_id, persist_db)
+        repo = _get_stage_repo(persist_db, session_id=sid)
         stages = repo.list_stages(parent_run_id=task_id)
         stage = next((s for s in stages if s.stage_number == stage_num), None)
         if stage:
@@ -1275,7 +1322,7 @@ async def _run_report_stage(
                 refreshed = repo.list_stages(parent_run_id=task_id)
                 if all(s.status == "completed" for s in refreshed):
                     from cmbagent.database.models import WorkflowRun as _WR2
-                    parent = db.query(_WR2).filter(_WR2.id == task_id).first()
+                    parent = persist_db.query(_WR2).filter(_WR2.id == task_id).first()
                     if parent:
                         parent.status = "completed"
             else:
@@ -1289,9 +1336,16 @@ async def _run_report_stage(
                     _console_buffers.setdefault(buf_key, []).append(
                         f"Stage {stage_num} failed: {result.error}"
                     )
-        db.commit()
+        persist_db.commit()
     finally:
-        db.close()
+        persist_db.close()
+    
+    # Clean up callbacks
+    if cost_collector:
+        try:
+            cost_collector.flush()
+        except Exception as exc:
+            logger.debug("cost_collector_flush_failed error=%s", exc)
 
 
 # =============================================================================

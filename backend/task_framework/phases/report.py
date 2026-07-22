@@ -113,6 +113,7 @@ class DeepresearchReportPhase(Phase):
                 llm_temperature=self.config.llm_temperature,
                 llm_max_tokens=self.config.llm_max_output_tokens,
                 keys=keys,
+                callbacks=context.callbacks,  # ← PASS CALLBACKS FOR TRACING
             )
 
             if result["status"] != "completed":

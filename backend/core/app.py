@@ -99,13 +99,16 @@ async def lifespan(app: FastAPI):
     _tracer_provider = None
     try:
         from cmbagent.tracing import init_tracing, shutdown_tracing
-        from services.tracing_bridge import init_paperpulse_tracing
+        from services.tracing_bridge import init_paperpulse_tracing, instrument_langchain
 
         _tracer_provider = init_tracing(
             service_name="MARS-PaperPulse",
             trace_name="paperpulse-backend",
         )
         init_paperpulse_tracing(_tracer_provider)
+        # Instrument LangChain/LangGraph so stages 4-5 (paper/report) LLM calls
+        # are exported to Langfuse alongside the AG2-based stages 1-3.
+        instrument_langchain(_tracer_provider)
         if _tracer_provider:
             log.info("Langfuse tracing enabled")
         else:

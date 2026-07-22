@@ -62,8 +62,9 @@ slowapi>=0.1.9                     # rate limiting (brute-force protection)
 email-validator>=2.0.0             # required by Pydantic EmailStr in auth router
 
 # Tracing / Observability (already pulled by mars_cmbagent[tracing]; pinned here for explicitness)
-opentelemetry-sdk>=1.20.0
-opentelemetry-exporter-otlp-proto-http>=1.20.0
+opentelemetry-sdk>=1.44.0
+opentelemetry-exporter-otlp-proto-http>=1.44.0
+openinference-instrumentation-langchain>=0.1.67   # traces stage 4-5 LangGraph/LangChain LLM calls into Langfuse
 
 # Test dependencies
 pytest>=8.0.0

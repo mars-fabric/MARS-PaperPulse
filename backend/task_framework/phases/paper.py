@@ -160,6 +160,18 @@ class DeepresearchPaperPhase(Phase):
                 "recursion_limit": 100,
             }
 
+            # Include callbacks in config for LangGraph tracing.
+            # cmbagent's WorkflowCallbacks is NOT a LangChain BaseCallbackHandler,
+            # so it must never go into config["callbacks"] (LangChain would raise
+            # AttributeError: 'WorkflowCallbacks' object has no attribute
+            # 'parent_run_id'). Stage-4 LLM tracing reaches Langfuse via the
+            # global OpenInference LangChain instrumentor; only forward genuine
+            # LangChain handlers if any are present.
+            from services.tracing_bridge import filter_langchain_callbacks
+            lc_callbacks = filter_langchain_callbacks(context.callbacks)
+            if lc_callbacks:
+                config["callbacks"] = lc_callbacks
+
             # Build graph (deepresearch.py:833)
             graph = build_graph(mermaid_diagram=False)
 
@@ -186,6 +198,7 @@ class DeepresearchPaperPhase(Phase):
             # CRITICAL: Must use await ainvoke (citations_node is async).
             # Since execute() is already async, we await directly instead of
             # asyncio.run() which would fail in a running event loop.
+            # Pass callbacks via config for Langfuse tracing.
             await graph.ainvoke(input_state, config)
 
             # Paper outputs are written to project_dir/paper/ by the graph nodes

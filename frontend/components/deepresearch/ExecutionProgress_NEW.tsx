@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import MacOSTerminalViewer from './MacOSTerminalViewer'
+import MacOSTerminalViewer from '../console/MacOSTerminalViewer'
 
 interface ExecutionProgressProps {
   consoleOutput: string[]

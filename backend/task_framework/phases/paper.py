@@ -16,6 +16,7 @@ import os
 import traceback
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from cmbagent.phases.base import Phase, PhaseConfig, PhaseContext, PhaseResult, PhaseStatus
@@ -93,12 +94,13 @@ class DeepresearchPaperPhase(Phase):
             elif isinstance(journal, str):
                 journal = Journal(journal)
 
-            # Resolve keys -- prefer config api_keys, fall back to context
+            # Resolve keys — vault (UI-stored) takes priority over env vars so
+            # that a user who saved a different Azure credential via Settings
+            # gets the correct key, not the server-wide .env default.
             keys = self.config.api_keys
             if keys is None:
-                # Try to construct KeyManager from context api_keys dict
                 keys = KeyManager()
-                keys.get_keys_from_env()
+                keys.get_keys_from_vault()
             elif isinstance(keys, dict):
                 keys = KeyManager(**keys)
 
@@ -222,6 +224,27 @@ class DeepresearchPaperPhase(Phase):
                         break
                     if os.path.exists(tex_path):
                         paper_tex = tex_path
+
+            # Validate that at least one .tex file was produced.  If the
+            # LangGraph pipeline ran but LaTeX compilation failed silently, no
+            # output files would exist and the stage would show as "completed"
+            # with null artifacts — misleading the user.  Fail explicitly here.
+            if not paper_pdf and not paper_tex:
+                paper_dir_path = Path(paper_dir)
+                existing = list(paper_dir_path.rglob("*.tex")) if paper_dir_path.exists() else []
+                if not existing:
+                    error_path = os.path.join(paper_dir, "Error.txt")
+                    hint = ""
+                    if os.path.exists(error_path):
+                        try:
+                            with open(error_path, encoding="utf-8", errors="replace") as fh:
+                                hint = fh.read(500)
+                        except Exception:
+                            pass
+                    raise RuntimeError(
+                        "Paper generation completed but produced no output files. "
+                        + (f"Error details: {hint}" if hint else "Check LaTeX compilation logs.")
+                    )
 
             manager.complete_step(1, "Research paper generated")
 

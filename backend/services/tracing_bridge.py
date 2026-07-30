@@ -6,11 +6,23 @@ into its SessionAttributeProcessor at construction time.  We work around
 this by adding our own DynamicSessionProcessor to the same TracerProvider
 after init_tracing() returns.  Because processors run in registration order,
 DynamicSessionProcessor executes last and overwrites session.id + user.id
-with the per-task values stored in ContextVars.
+with the per-task values stored in the trace registry.
 
-Python's asyncio.to_thread() copies the current contextvars.Context snapshot
-into the worker thread, so values set before to_thread() are automatically
-available in the thread — no manual propagation needed for ContextVars.
+Lookup strategy in DynamicSessionProcessor
+-------------------------------------------
+ContextVars are ideal for asyncio tasks and threads spawned via
+asyncio.to_thread(), but AG2 creates its own internal threads that do NOT
+inherit the calling context's ContextVars.  The solution is a
+process-global _TRACE_REGISTRY dict keyed by OTel trace_id (derived
+deterministically from task_id UUID).  The trace_id is always present on
+every span object, regardless of which thread the span ends in, so the
+registry lookup is always reliable.
+
+ContextVars are kept as a secondary source for compatibility.
+
+Registry lifecycle:
+  set_task_trace_context()   → registers entry
+  clear_task_trace_context() → removes entry (called after stage flush)
 
 For W3C trace context (parent span ID), callers must manually capture and
 restore otel_context.get_current() in the worker thread.
@@ -19,23 +31,53 @@ restore otel_context.get_current() in the worker thread.
 from __future__ import annotations
 
 import logging
+import os
+import re as _re
+import threading
 from contextvars import ContextVar
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-# Per-task context vars — set before entering stage execution
+# ---------------------------------------------------------------------------
+# Per-task context vars — set before entering stage execution.
+# Available in asyncio tasks and threads spawned via asyncio.to_thread().
+# NOT available in AG2's internal threads (use _TRACE_REGISTRY instead).
+# ---------------------------------------------------------------------------
 _session_id_var: ContextVar[str] = ContextVar("pp_session_id", default="")
 _trace_name_var: ContextVar[str] = ContextVar("pp_trace_name",  default="")
 _user_id_var:    ContextVar[str] = ContextVar("pp_user_id",     default="")
 
+# ---------------------------------------------------------------------------
+# Process-global trace registry — keyed by OTel trace_id hex string.
+# Works in ALL threads including AG2 internals.
+# ---------------------------------------------------------------------------
+_TRACE_REGISTRY: Dict[str, Dict[str, str]] = {}
+_REGISTRY_LOCK = threading.Lock()
 
-# Resolve the real SpanProcessor base class so this processor implements the
-# full interface the SDK expects. Newer OpenTelemetry SDKs (>=1.44) invoke
-# internal hooks like ``_on_ending`` on every registered processor, which only
-# exist on the ``SpanProcessor`` ABC — a duck-typed class raises
-# AttributeError. Falling back to ``object`` keeps import-safety when the SDK
-# is absent (tracing disabled in dev).
+
+def _registry_get(trace_id_hex: str) -> Dict[str, str]:
+    with _REGISTRY_LOCK:
+        return dict(_TRACE_REGISTRY.get(trace_id_hex, {}))
+
+
+def _registry_set(trace_id_hex: str, session_id: str, trace_name: str, user_id: str) -> None:
+    with _REGISTRY_LOCK:
+        _TRACE_REGISTRY[trace_id_hex] = {
+            "session_id": session_id,
+            "trace_name": trace_name,
+            "user_id":    user_id,
+        }
+
+
+def _registry_remove(trace_id_hex: str) -> None:
+    with _REGISTRY_LOCK:
+        _TRACE_REGISTRY.pop(trace_id_hex, None)
+
+
+# ---------------------------------------------------------------------------
+# SpanProcessor base
+# ---------------------------------------------------------------------------
 try:  # pragma: no cover - exercised only when SDK present
     from opentelemetry.sdk.trace import SpanProcessor as _SpanProcessorBase
 except Exception:  # pragma: no cover - SDK not installed
@@ -44,33 +86,147 @@ except Exception:  # pragma: no cover - SDK not installed
 
 class DynamicSessionProcessor(_SpanProcessorBase):
     """
-    OpenTelemetry SpanProcessor that reads per-task values from ContextVars
-    and overwrites session.id / langfuse.trace.name / user.id on every span.
+    OpenTelemetry SpanProcessor that overwrites session.id / user.id /
+    langfuse.trace.name on every span using per-task values from the
+    trace registry (keyed by OTel trace_id).
 
     Registered on the TracerProvider AFTER cmbagent's SessionAttributeProcessor
     so our values win.
+
+    Implementation note — OTel SDK immutability
+    -------------------------------------------
+    Span.end() sets _attributes._immutable = True before calling ANY
+    span-processor hooks (both _on_ending and on_end).  Standard
+    __setitem__ / __delitem__ raise TypeError on an immutable
+    BoundedAttributes.  We bypass this by writing directly to
+    span._attributes._dict (the underlying plain dict).
+
+    We do the work in _on_ending() rather than on_end() because _on_ending
+    is called before BatchSpanProcessor.on_end() queues the span for async
+    export — so there is no race between our modification and the export
+    thread serialising the attributes.
+
+    Lookup order for per-task values:
+      1. _TRACE_REGISTRY[span.context.trace_id] — works in ALL threads
+         including AG2's internal threads that do not inherit ContextVars.
+      2. ContextVars — fallback for any span not covered by the registry.
     """
 
-    def on_start(self, span: Any, parent_context: Any = None) -> None:
+    def _lookup(self, span: Any) -> Dict[str, str]:
+        """Return the per-task record for this span's trace_id, or {}."""
+        try:
+            tid = format(span.context.trace_id, "032x")
+            rec = _registry_get(tid)
+            if rec:
+                return rec
+        except Exception as exc:
+            log.debug("_lookup registry exception: %s", exc)
+        # ContextVar fallback
         sid   = _session_id_var.get()
         tname = _trace_name_var.get()
         uid   = _user_id_var.get()
+        if sid or tname or uid:
+            return {"session_id": sid, "trace_name": tname, "user_id": uid}
+        return {}
+
+    @staticmethod
+    def _raw(attrs: Any) -> Any:
+        """Return the underlying mutable dict of a BoundedAttributes object.
+
+        BoundedAttributes._immutable blocks __setitem__/__delitem__ after
+        Span.end() — access ._dict directly to bypass the guard.
+        Falls back to the attrs object itself for duck-typed callers.
+        """
+        return getattr(attrs, "_dict", attrs)
+
+    def on_start(self, span: Any, parent_context: Any = None) -> None:
+        rec = self._lookup(span)
+        if not rec:
+            return
+
+        sid   = rec.get("session_id", "")
+        tname = rec.get("trace_name", "")
+        uid   = rec.get("user_id", "")
+
         if sid:
             span.set_attribute("session.id", sid)
-        if tname:
-            span.set_attribute("langfuse.trace.name", tname)
         if uid:
             span.set_attribute("user.id", uid)
 
-    def on_end(self, span: Any) -> None:  # noqa: D401
-        pass
+        # Stamp langfuse.trace.name only on stage-root or true-root spans.
+        # Child spans do NOT get it here; _on_ending will DELETE any
+        # langfuse.trace.name set by cmbagent's workflow_span body.
+        if tname:
+            try:
+                parent = getattr(span, "parent", None)
+                is_root = parent is None or not getattr(parent, "is_valid", False)
+                is_stage_root = bool(parent and getattr(parent, "is_remote", False))
+                if is_root or is_stage_root:
+                    span.set_attribute("langfuse.trace.name", tname)
+            except Exception:
+                span.set_attribute("langfuse.trace.name", tname)
+
+    def _on_ending(self, span: Any) -> None:
+        """Mutate span attributes just before the span is ended.
+
+        Called by the SDK BEFORE BatchSpanProcessor queues the span, so
+        every change here is guaranteed to be visible to the export thread.
+        _attributes._immutable is True at this point; we bypass it via ._dict.
+        """
+        ba = getattr(span, "_attributes", None)
+        if ba is None:
+            return
+        d = self._raw(ba)
+
+        rec = self._lookup(span)
+        if rec:
+            sid   = rec.get("session_id", "")
+            uid   = rec.get("user_id", "")
+            tname = rec.get("trace_name", "")
+            try:
+                if sid:
+                    d["session.id"] = sid
+                if uid:
+                    d["user.id"] = uid
+
+                parent = getattr(span, "parent", None)
+                is_root = parent is None or not getattr(parent, "is_valid", False)
+                is_stage_root = bool(parent and getattr(parent, "is_remote", False))
+
+                if is_root or is_stage_root:
+                    if tname:
+                        d["langfuse.trace.name"] = tname
+                else:
+                    # Child span: delete langfuse.trace.name so Langfuse
+                    # never renames the trace from a step span.
+                    d.pop("langfuse.trace.name", None)
+            except Exception as exc:
+                log.debug("DynamicSessionProcessor _on_ending re-stamp failed: %s", exc)
+
+        # Redact prompt/key payloads
+        redact = os.environ.get("MARS_TRACING_REDACT", "prompts").lower()
+        if redact == "none":
+            return
+        _REDACT_PREFIXES = ("gen_ai.prompt.", "gen_ai.completion.", "llm.")
+        _REDACT_EXACT = {"input.value", "output.value",
+                         "input.messages", "output.messages"}
+        try:
+            for key in list(d.keys()):
+                if not isinstance(key, str):
+                    continue
+                if key in _REDACT_EXACT or any(key.startswith(p) for p in _REDACT_PREFIXES):
+                    d[key] = "<redacted>"
+        except Exception as exc:
+            log.debug("DynamicSessionProcessor redaction failed: %s", exc)
+
+    def on_end(self, span: Any) -> None:
+        pass  # all work done in _on_ending before the span is queued
 
     def shutdown(self) -> None:
         pass
 
     def force_flush(self, timeout_millis: Optional[int] = None) -> bool:
         return True
-
 
 
 def init_paperpulse_tracing(provider: Any) -> None:
@@ -152,12 +308,9 @@ def build_trace_name(
     stage_num: Optional[int] = None,
     stage_name: Optional[str] = None,
 ) -> str:
-    """Build a Langfuse trace name.
+    """Legacy stage-scoped trace name. Kept for backward compatibility.
 
-    When a stage is known, the name is prefixed with ``stage{n}_{stage_name}_``
-    so each stage shows up as its own clearly-labelled trace in Langfuse while
-    still grouping under the same ``session.id`` (= task_id).  Falls back to the
-    legacy ``deepresearch-{task_id}`` form when no stage context is available.
+    New code should use build_run_trace_name() so all 5 stages share one trace.
     """
     if stage_num is not None:
         label = (stage_name or "stage").strip().replace(" ", "_")
@@ -165,33 +318,95 @@ def build_trace_name(
     return f"deepresearch-{task_id}"
 
 
+def build_run_trace_name(user_name: str, task_id: str) -> str:
+    """Build the parent Langfuse trace name that groups all 5 stages of a run.
+
+    Format: ``{user_slug}_{task_id}``
+    All stage spans share this name so they appear under one Langfuse trace.
+    """
+    slug = _re.sub(r"[^a-z0-9]+", "_", user_name.lower()).strip("_") or "user"
+    return f"{slug}_{task_id}"
+
+
+def make_virtual_parent_context(task_id: str) -> Optional[Any]:
+    """Return an OTel context holding a virtual (non-recording) root span.
+
+    The span's trace_id is derived deterministically from ``task_id`` (UUID).
+    Passing this as ``context=`` to ``tracer.start_as_current_span()`` makes
+    every stage span a child of the same virtual root — they all share one
+    OTel trace_id and therefore appear under one Langfuse trace.
+
+    The virtual span is never exported (NonRecordingSpan).  Its ``is_remote``
+    flag is True, which ``DynamicSessionProcessor`` uses to detect stage-root
+    spans and stamp ``langfuse.trace.name`` on them.
+
+    Returns None when opentelemetry is not installed (tracing disabled).
+    """
+    try:
+        import uuid as _uuid
+        from opentelemetry import trace as _otel_trace
+        from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+
+        trace_id_int = int(_uuid.UUID(task_id))
+        span_ctx = SpanContext(
+            trace_id=trace_id_int,
+            span_id=0x0000000000000001,
+            is_remote=True,
+            trace_flags=TraceFlags(0x01),
+        )
+        return _otel_trace.set_span_in_context(NonRecordingSpan(span_ctx))
+    except Exception as exc:
+        log.debug("make_virtual_parent_context unavailable: %s", exc)
+        return None
+
+
 def set_task_trace_context(
     task_id: str,
     user_id: str,
+    run_trace_name: str = "",
     stage_num: Optional[int] = None,
     stage_name: Optional[str] = None,
 ) -> Tuple:
     """
-    Set per-task tracing context in the current async coroutine.
+    Set per-task tracing context for the current async coroutine AND the
+    process-global trace registry.
 
-    Must be called BEFORE asyncio.to_thread() so the worker thread
-    inherits the ContextVar values.
-
-    When ``stage_num`` / ``stage_name`` are supplied the Langfuse trace name is
-    stage-scoped (e.g. ``stage4_paper_generation_<task_id>``) so stages are
-    easy to distinguish in the Langfuse UI.
+    The registry entry is keyed by the OTel trace_id derived from task_id
+    (same deterministic mapping used by make_virtual_parent_context).  This
+    ensures DynamicSessionProcessor can look up correct values even in AG2's
+    internal threads that do not inherit ContextVars.
 
     Returns tokens for reset via clear_task_trace_context().
     """
+    import uuid as _uuid
+    tname = (
+        run_trace_name if run_trace_name
+        else build_trace_name(task_id, stage_num, stage_name)
+    )
+
+    # Register in global registry keyed by the deterministic trace_id hex.
+    trace_id_hex = _uuid.UUID(task_id).hex  # 32-char hex, no dashes
+    _registry_set(trace_id_hex, task_id, tname, user_id)
+
+    # Also set ContextVars for threads that do inherit them.
     t1 = _session_id_var.set(task_id)
-    t2 = _trace_name_var.set(build_trace_name(task_id, stage_num, stage_name))
+    t2 = _trace_name_var.set(tname)
     t3 = _user_id_var.set(user_id)
     return (t1, t2, t3)
 
 
 def clear_task_trace_context(tokens: Tuple) -> None:
-    """Reset ContextVars to their previous values."""
+    """Reset ContextVars and remove the task from the trace registry."""
     t1, t2, t3 = tokens
+    # The current ContextVar value is the task_id we registered — remove it
+    # from the registry BEFORE resetting the ContextVar.
+    try:
+        import uuid as _uuid
+        current_task_id = _session_id_var.get()
+        if current_task_id:
+            _registry_remove(_uuid.UUID(current_task_id).hex)
+    except Exception:
+        pass
     _session_id_var.reset(t1)
     _trace_name_var.reset(t2)
     _user_id_var.reset(t3)

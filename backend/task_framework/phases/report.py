@@ -68,11 +68,11 @@ class DeepresearchReportPhase(Phase):
             work_dir = os.path.abspath(str(context.work_dir))
             context.work_dir = work_dir
 
-            # Resolve keys
+            # Resolve keys — vault (UI-stored) takes priority over env vars.
             keys = self.config.api_keys
             if keys is None:
                 keys = KeyManager()
-                keys.get_keys_from_env()
+                keys.get_keys_from_vault()
             elif isinstance(keys, dict):
                 keys = KeyManager(**keys)
 

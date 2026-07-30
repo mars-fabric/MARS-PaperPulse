@@ -33,6 +33,10 @@ class TestDynamicSessionProcessor:
         token_t = _trace_name_var.set("deepresearch-task-abc-123")
         try:
             span = MagicMock()
+            # Simulate a root span (no valid parent) so langfuse.trace.name is set.
+            # DynamicSessionProcessor only stamps trace name on root spans to
+            # prevent LangChain child spans from creating separate Langfuse traces.
+            span.parent = None
             proc = DynamicSessionProcessor()
             proc.on_start(span)
 

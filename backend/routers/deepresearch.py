@@ -25,6 +25,8 @@ from services.tracing_bridge import (
     clear_task_trace_context,
     get_task_trace_context,
     get_tracer,
+    build_run_trace_name,
+    make_virtual_parent_context,
 )
 
 from models.deepresearch_schemas import (
@@ -62,6 +64,24 @@ STAGE_DEFS = [
     {"number": 4, "name": "paper_generation", "shared_key": None, "file": None},
     {"number": 5, "name": "report_generation", "shared_key": None, "file": None},
 ]
+
+# Langfuse span names for each stage — visible inside the shared parent trace
+STAGE_SPAN_NAMES = {
+    1: "idea_generation",
+    2: "method_development",
+    3: "experiment_development",
+    4: "paper_writing",
+    5: "report_writing",
+}
+
+
+def _derive_user_name(user) -> str:
+    """Return a clean slug from user email for Langfuse trace naming."""
+    import re as _re
+    name = getattr(user, "email", "") or str(getattr(user, "id", "user"))
+    if "@" in name:
+        name = name.split("@")[0]
+    return _re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "user"
 
 
 # Track running background tasks
@@ -665,10 +685,11 @@ async def execute_stage(
 
     # Set per-task trace context BEFORE creating the asyncio task so the
     # worker thread (via asyncio.to_thread) inherits the contextvar values.
+    _user_name = _derive_user_name(current_user)
+    _run_trace = build_run_trace_name(_user_name, task_id)
     trace_tokens = set_task_trace_context(
         task_id, current_user.id,
-        stage_num=stage_num,
-        stage_name=STAGE_DEFS[stage_num - 1]["name"],
+        run_trace_name=_run_trace,
     )
 
     # Write audit entry for stage execution start (use auth_db so tests work)
@@ -686,6 +707,7 @@ async def execute_stage(
             _run_phase(
                 task_id, stage_num, task_description, work_dir, shared_state,
                 config_overrides, user_id=current_user.id,
+                user_name=_user_name,
             )
         )
         _running_tasks[bg_key] = task
@@ -703,6 +725,7 @@ async def _run_phase(
     shared_state: Dict[str, Any],
     config_overrides: Dict[str, Any],
     user_id: str = "",
+    user_name: str = "",
 ):
     """Execute a Deepresearch phase in the background.
 
@@ -723,16 +746,22 @@ async def _run_phase(
 
     # Re-apply trace context (asyncio.to_thread workers inherit contextvars,
     # but the asyncio task itself also needs it for direct awaits).
+    _run_trace = build_run_trace_name(user_name or "user", task_id)
     trace_tokens = set_task_trace_context(
         task_id, user_id,
-        stage_num=stage_num,
-        stage_name=sdef["name"],
+        run_trace_name=_run_trace,
     )
     tracer = get_tracer("paperpulse.stages")
+    # Virtual parent context: all 5 stage spans share the same OTel trace_id
+    # (derived from task_id) so they appear under one Langfuse trace named
+    # {user_name}_{task_id}.  The parent is a NonRecordingSpan (never exported).
+    _parent_ctx = make_virtual_parent_context(task_id)
 
     try:
+        _span_name = STAGE_SPAN_NAMES.get(stage_num, f"stage_{stage_num}_{sdef['name']}")
         with tracer.start_as_current_span(
-            f"stage_{stage_num}_{sdef['name']}",
+            _span_name,
+            context=_parent_ctx,
         ) as span:
             try:
                 span.set_attribute("task_id", task_id)

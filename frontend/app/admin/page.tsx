@@ -17,8 +17,8 @@ export default function AdminPage() {
 
   if (isLoading || !user || user.role !== 'admin') {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-950">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
+      <div className="h-full flex items-center justify-center" style={{ backgroundColor: 'var(--mars-color-bg)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--mars-color-primary)' }} />
       </div>
     )
   }

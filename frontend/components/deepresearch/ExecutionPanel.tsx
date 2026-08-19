@@ -127,28 +127,30 @@ export default function ExecutionPanel({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-4 mars-animate-in">
       {/* Stats bar */}
-      <div className="flex items-center gap-6">
-        {(isExecuting || elapsed > 0) && (
-          <div
-            className="flex items-center gap-2 text-xs"
-            style={{ color: 'var(--mars-color-text-secondary)' }}
-          >
-            <Timer className="w-3.5 h-3.5" />
-            {formatTime(elapsed)}
-          </div>
-        )}
-        {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (
-          <div
-            className="flex items-center gap-2 text-xs"
-            style={{ color: 'var(--mars-color-text-secondary)' }}
-          >
-            <DollarSign className="w-3.5 h-3.5" />
-            ${taskState.total_cost_usd.toFixed(4)}
-          </div>
-        )}
-      </div>
+      {((isExecuting || elapsed > 0) || (taskState?.total_cost_usd != null && taskState.total_cost_usd > 0)) && (
+        <div className="flex items-center gap-2.5">
+          {(isExecuting || elapsed > 0) && (
+            <div
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-mars-md tabular-nums"
+              style={{ color: 'var(--mars-color-text-secondary)', backgroundColor: 'var(--mars-color-surface-overlay)', border: '1px solid var(--mars-color-border)' }}
+            >
+              <Timer className="w-3.5 h-3.5" style={{ color: 'var(--mars-color-primary)' }} />
+              {formatTime(elapsed)}
+            </div>
+          )}
+          {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (
+            <div
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-mars-md tabular-nums"
+              style={{ color: 'var(--mars-color-text-secondary)', backgroundColor: 'var(--mars-color-surface-overlay)', border: '1px solid var(--mars-color-border)' }}
+            >
+              <DollarSign className="w-3.5 h-3.5" style={{ color: 'var(--mars-color-success)' }} />
+              {taskState.total_cost_usd.toFixed(4)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Execution output */}
       <ExecutionProgress
@@ -164,7 +166,7 @@ export default function ExecutionPanel({
           style={{
             backgroundColor: 'var(--mars-color-danger-subtle)',
             color: 'var(--mars-color-danger)',
-            border: '1px solid var(--mars-color-danger)',
+            border: '1px solid color-mix(in srgb, var(--mars-color-danger) 40%, transparent)',
           }}
         >
           {stage.error}

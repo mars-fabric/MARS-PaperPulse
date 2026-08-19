@@ -37,8 +37,10 @@ export function useResizableSidebar() {
     const container = containerRef.current
     if (!container) return
 
+    // Sidebar is docked to the right, so its width is the distance from the
+    // cursor to the container's fixed right edge (dragging left widens it).
     const rect = container.getBoundingClientRect()
-    const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX - rect.left))
+    const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, rect.right - e.clientX))
     setWidth(newWidth)
   }, [isResizing])
 

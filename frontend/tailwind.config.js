@@ -68,6 +68,36 @@ module.exports = {
         'mars-md': 'var(--mars-shadow-md)',
         'mars-lg': 'var(--mars-shadow-lg)',
         'mars-xl': 'var(--mars-shadow-xl)',
+        'glow': 'var(--mars-shadow-glow)',
+        'glow-sm': 'var(--mars-shadow-glow-sm)',
+      },
+      backgroundImage: {
+        'brand-gradient': 'var(--mars-gradient-brand)',
+        'brand-gradient-hover': 'var(--mars-gradient-brand-hover)',
+      },
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'scale-in': {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'shimmer': {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in var(--mars-duration-slow) var(--mars-ease-standard) both',
+        'slide-up': 'slide-up var(--mars-duration-slow) var(--mars-ease-standard) both',
+        'scale-in': 'scale-in var(--mars-duration-normal) var(--mars-ease-standard) both',
+        'shimmer': 'shimmer 2s linear infinite',
       },
       zIndex: {
         'dropdown': 'var(--mars-z-dropdown)',

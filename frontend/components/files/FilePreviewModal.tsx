@@ -30,6 +30,14 @@ export default function FilePreviewModal({
       return
     }
 
+    // PDFs are rendered inline from the file URL — skip the text-content fetch
+    if (/\.pdf$/i.test(filePath)) {
+      setFileContent(null)
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+
     const fetchFileContent = async () => {
       setIsLoading(true)
       setError(null)

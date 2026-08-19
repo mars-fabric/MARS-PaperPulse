@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2, Download, FileText, Image as ImageIcon, File } from 'lucide-react'
+import { Eye, Edit3, Save, ArrowRight, ArrowLeft, Play, Loader2, Settings2, Download, FileText, Image as ImageIcon, File, Check } from 'lucide-react'
 import { Button } from '@/components/core'
 import { getApiUrl } from '@/lib/config'
 import RefinementChat from './RefinementChat'
@@ -316,25 +316,27 @@ export default function ReviewPanel({
   }
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '500px' }}>
+    <div className="flex flex-col mars-animate-in" style={{ minHeight: '500px' }}>
       {/* Split view: Editor (60%) + Chat (40%) */}
       <div className="flex flex-1 gap-4" style={{ minHeight: '400px' }}>
         {/* Editor panel */}
         <div
-          className="flex-[3] flex flex-col rounded-mars-md border overflow-hidden"
+          className="flex-[3] flex flex-col rounded-mars-lg border overflow-hidden"
           style={{
             borderColor: 'var(--mars-color-border)',
-            backgroundColor: 'var(--mars-color-surface)',
+            backgroundColor: 'var(--mars-color-surface-raised)',
+            boxShadow: 'var(--mars-shadow-sm)',
           }}
         >
           {/* Editor toolbar */}
           <div
-            className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
-            style={{ borderColor: 'var(--mars-color-border)' }}
+            className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
+            style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
           >
             <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4" style={{ color: 'var(--mars-color-primary)' }} />
               <span
-                className="text-sm font-medium"
+                className="text-sm font-semibold"
                 style={{ color: 'var(--mars-color-text)' }}
               >
                 {stageName}
@@ -342,44 +344,54 @@ export default function ReviewPanel({
 
               {/* Save indicator */}
               {saveIndicator === 'saving' && (
-                <span className="text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                  <Loader2 className="w-3 h-3 animate-spin" />
                   Saving...
                 </span>
               )}
               {saveIndicator === 'saved' && (
-                <span className="text-xs" style={{ color: 'var(--mars-color-success)' }}>
+                <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--mars-color-success)' }}>
+                  <Check className="w-3 h-3" />
                   Saved
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setMode('edit')}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors"
-                style={{
-                  backgroundColor: mode === 'edit' ? 'var(--mars-color-primary-subtle)' : 'transparent',
-                  color: mode === 'edit' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
-                }}
+            <div className="flex items-center gap-2">
+              {/* Segmented Edit/Preview toggle */}
+              <div
+                className="flex items-center gap-0.5 p-0.5 rounded-mars-md"
+                style={{ backgroundColor: 'var(--mars-color-surface-overlay)' }}
               >
-                <Edit3 className="w-3 h-3" />
-                Edit
-              </button>
-              <button
-                onClick={() => setMode('preview')}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors"
-                style={{
-                  backgroundColor: mode === 'preview' ? 'var(--mars-color-primary-subtle)' : 'transparent',
-                  color: mode === 'preview' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
-                }}
-              >
-                <Eye className="w-3 h-3" />
-                Preview
-              </button>
+                <button
+                  onClick={() => setMode('edit')}
+                  className="mars-focus-ring flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-mars-sm transition-all"
+                  style={{
+                    backgroundColor: mode === 'edit' ? 'var(--mars-color-surface-raised)' : 'transparent',
+                    color: mode === 'edit' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                    boxShadow: mode === 'edit' ? 'var(--mars-shadow-sm)' : 'none',
+                  }}
+                >
+                  <Edit3 className="w-3 h-3" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => setMode('preview')}
+                  className="mars-focus-ring flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-mars-sm transition-all"
+                  style={{
+                    backgroundColor: mode === 'preview' ? 'var(--mars-color-surface-raised)' : 'transparent',
+                    color: mode === 'preview' ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                    boxShadow: mode === 'preview' ? 'var(--mars-shadow-sm)' : 'none',
+                  }}
+                >
+                  <Eye className="w-3 h-3" />
+                  Preview
+                </button>
+              </div>
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-mars-sm transition-colors ml-2"
+                className="mars-focus-ring flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-mars-sm transition-colors hover:bg-[var(--mars-color-bg-hover)]"
                 style={{
                   color: 'var(--mars-color-text-secondary)',
                 }}
@@ -391,12 +403,12 @@ export default function ReviewPanel({
           </div>
 
           {/* Editor / Preview */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto mars-scrollbar" style={{ backgroundColor: 'var(--mars-color-surface)' }}>
             {mode === 'edit' ? (
               <textarea
                 value={editableContent}
                 onChange={(e) => handleContentChange(e.target.value)}
-                className="w-full h-full p-4 font-mono text-sm resize-none outline-none bg-transparent"
+                className="w-full h-full p-4 font-mono text-sm leading-relaxed resize-none outline-none bg-transparent mars-scrollbar"
                 style={{ color: 'var(--mars-color-text)', minHeight: '100%' }}
                 spellCheck={false}
               />
@@ -410,10 +422,11 @@ export default function ReviewPanel({
 
         {/* Chat panel */}
         <div
-          className="flex-[2] rounded-mars-md border overflow-hidden flex flex-col"
+          className="flex-[2] rounded-mars-lg border overflow-hidden flex flex-col"
           style={{
             borderColor: 'var(--mars-color-border)',
-            backgroundColor: 'var(--mars-color-surface)',
+            backgroundColor: 'var(--mars-color-surface-raised)',
+            boxShadow: 'var(--mars-shadow-sm)',
           }}
         >
           <RefinementChat
@@ -426,9 +439,16 @@ export default function ReviewPanel({
 
       {/* Artifacts (files generated by the stage on disk) */}
       {artifacts.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--mars-color-text)' }}>
-            Generated Artifacts ({artifacts.length})
+        <div className="mt-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold mb-3" style={{ color: 'var(--mars-color-text)' }}>
+            <File className="w-4 h-4" style={{ color: 'var(--mars-color-primary)' }} />
+            Generated Artifacts
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: 'var(--mars-color-primary-subtle)', color: 'var(--mars-color-primary)' }}
+            >
+              {artifacts.length}
+            </span>
           </h3>
           <div className="space-y-3">
             {(['plots', 'codebase', 'data', 'output'] as const).map((groupKey) => {
@@ -436,27 +456,27 @@ export default function ReviewPanel({
               if (!items || items.length === 0) return null
               return (
                 <div key={groupKey}>
-                  <div className="text-xs font-medium mb-1" style={{ color: 'var(--mars-color-text-secondary)' }}>
+                  <div className="text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--mars-color-text-tertiary)' }}>
                     {groupKey === 'output' ? 'Output' : groupKey} ({items.length})
                   </div>
-                  <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                  <div className="space-y-1 max-h-64 overflow-y-auto pr-1 mars-scrollbar">
                     {items.map((path) => (
                       <div key={path}>
                         <div
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-mars-sm border text-xs"
+                          className="group flex items-center gap-2 px-3 py-2 rounded-mars-md border text-xs transition-all
+                            bg-[var(--mars-color-surface)] hover:bg-[var(--mars-color-surface-overlay)]"
                           style={{
-                            backgroundColor: 'var(--mars-color-surface)',
                             borderColor: 'var(--mars-color-border)',
                           }}
                         >
-                          <span style={{ color: 'var(--mars-color-text-secondary)' }}>{getFileIcon(path)}</span>
-                          <span className="flex-1 truncate" style={{ color: 'var(--mars-color-text)' }} title={path}>
+                          <span style={{ color: 'var(--mars-color-primary)' }}>{getFileIcon(path)}</span>
+                          <span className="flex-1 truncate font-medium" style={{ color: 'var(--mars-color-text)' }} title={path}>
                             {getFileName(path)}
                           </span>
                           {isImage(path) && (
                             <button
                               onClick={() => setPreviewImg(previewImg === path ? null : path)}
-                              className="flex items-center gap-1"
+                              className="mars-focus-ring flex items-center gap-1 px-2 py-1 rounded-mars-sm transition-colors hover:bg-[var(--mars-color-bg-hover)]"
                               style={{ color: 'var(--mars-color-text-secondary)' }}
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -466,7 +486,7 @@ export default function ReviewPanel({
                           <a
                             href={getApiUrl(`/api/files/download?path=${encodeURIComponent(path)}`)}
                             download={getFileName(path)}
-                            className="flex items-center gap-1 ml-2"
+                            className="mars-focus-ring flex items-center gap-1 ml-1 px-2 py-1 rounded-mars-sm font-medium transition-colors hover:bg-[var(--mars-color-primary-subtle)]"
                             style={{ color: 'var(--mars-color-primary)' }}
                           >
                             <Download className="w-3.5 h-3.5" />
@@ -475,7 +495,7 @@ export default function ReviewPanel({
                         </div>
                         {isImage(path) && previewImg === path && (
                           <div
-                            className="mt-1 border rounded-mars-sm overflow-hidden flex items-center justify-center"
+                            className="mt-1 border rounded-mars-md overflow-hidden flex items-center justify-center animate-scale-in"
                             style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)', padding: '8px' }}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}

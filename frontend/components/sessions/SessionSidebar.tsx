@@ -56,8 +56,8 @@ function getStatusConfig(status: string, progress: number) {
     icon: Clock,
     label: 'In Progress',
     color: 'var(--mars-color-primary)',
-    bgColor: 'rgba(59, 130, 246, 0.1)',
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    bgColor: 'rgba(99, 102, 241, 0.1)',
+    borderColor: 'rgba(99, 102, 241, 0.3)',
     pulse: false,
   }
 }
@@ -118,13 +118,14 @@ export default function SessionSidebar({
     >
       {/* Resize Handle */}
       <div
-        onMouseDown={onStartResize}
-        className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-gradient-to-b from-blue-500/40 via-blue-500/20 to-transparent transition-colors"
-        style={{
-          backgroundColor: 'transparent',
-        }}
+        onMouseDown={(e) => { e.preventDefault(); onStartResize?.() }}
+        className="group/resize absolute top-0 left-0 w-2 h-full cursor-col-resize z-20 flex justify-center"
         title="Drag to resize sidebar"
-      />
+        role="separator"
+        aria-orientation="vertical"
+      >
+        <span className="w-0.5 h-full bg-transparent group-hover/resize:bg-[var(--mars-color-primary)] transition-colors" />
+      </div>
       {/* Header */}
       <div
         className="flex-shrink-0 px-4 py-3 border-b"
@@ -162,15 +163,11 @@ export default function SessionSidebar({
             <button
               key={filter}
               onClick={() => setFilterStatus(filter)}
-              className="px-2 py-1 rounded text-[10px] font-medium capitalize transition-colors"
-              style={{
-                backgroundColor: filterStatus === filter
-                  ? 'var(--mars-color-primary-subtle)'
-                  : 'transparent',
-                color: filterStatus === filter
-                  ? 'var(--mars-color-primary)'
-                  : 'var(--mars-color-text-tertiary)',
-              }}
+              className={`mars-focus-ring px-2 py-1 rounded-mars-sm text-[10px] font-medium capitalize transition-colors ${
+                filterStatus === filter
+                  ? 'bg-[var(--mars-color-primary-subtle)] text-[var(--mars-color-primary)]'
+                  : 'text-[var(--mars-color-text-tertiary)] hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text-secondary)]'
+              }`}
             >
               {filter} {statusCounts[filter] > 0 && `(${statusCounts[filter]})`}
             </button>
@@ -200,14 +197,12 @@ export default function SessionSidebar({
                 tabIndex={0}
                 onClick={() => onSelectSession(session.task_id)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectSession(session.task_id); } }}
-                className="w-full text-left px-3 py-2.5 mx-1.5 mb-0.5 rounded-lg transition-all duration-150 group cursor-pointer"
-                style={{
-                  width: 'calc(100% - 12px)',
-                  backgroundColor: isActive
-                    ? 'var(--mars-color-primary-subtle)'
-                    : 'transparent',
-                  borderLeft: isActive ? '3px solid var(--mars-color-primary)' : '3px solid transparent',
-                }}
+                className={`mars-focus-ring w-full text-left px-3 py-2.5 mx-1.5 mb-0.5 rounded-mars-md transition-all duration-150 group cursor-pointer border-l-[3px] ${
+                  isActive
+                    ? 'bg-[var(--mars-color-primary-subtle)] border-[var(--mars-color-primary)]'
+                    : 'border-transparent hover:bg-[var(--mars-color-bg-hover)]'
+                }`}
+                style={{ width: 'calc(100% - 12px)' }}
               >
                 <div className="flex items-start gap-2.5">
                   {/* Status Icon */}

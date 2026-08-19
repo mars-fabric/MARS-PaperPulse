@@ -108,6 +108,35 @@ export default function FilePreview({
     )
   }
 
+  // PDF preview — rendered inline via the serve endpoint (browser's native viewer)
+  const isPdf = /\.pdf$/i.test(fileName) || mimeType === 'application/pdf'
+  if (isPdf) {
+    const pdfSrc = filePath
+      ? getApiUrl(`/api/files/serve?path=${encodeURIComponent(filePath)}`)
+      : ''
+    return (
+      <div className="mars-file-viewer">
+        <FileViewerHeader
+          fileName={fileName}
+          sizeBytes={sizeBytes}
+          iconConfig={iconConfig}
+          onDownload={onDownload}
+          onOpenExternal={onOpenExternal}
+        />
+        {pdfSrc ? (
+          <iframe
+            src={pdfSrc}
+            title={fileName}
+            className="w-full block"
+            style={{ height: '78vh', border: 'none', backgroundColor: 'var(--mars-color-surface-overlay)' }}
+          />
+        ) : (
+          <NoPreview fileName={fileName} message="PDF source not available" />
+        )}
+      </div>
+    )
+  }
+
   // No content available — show placeholder
   if (!content) {
     return (

@@ -134,19 +134,28 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
         role="dialog"
         aria-modal="true"
         aria-labelledby="signup-title"
-        className="relative w-full max-w-md rounded-xl shadow-2xl bg-gray-900 border border-gray-700/60 flex flex-col max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-md rounded-mars-lg shadow-mars-xl flex flex-col max-h-[90vh] overflow-y-auto
+          animate-[mars-scale-in_var(--mars-duration-normal)_var(--mars-ease-standard)]"
+        style={{
+          backgroundColor: 'var(--mars-color-surface-raised)',
+          border: '1px solid var(--mars-color-border)',
+        }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-0 sticky top-0 bg-gray-900 z-10">
+        <div
+          className="flex items-center justify-between px-6 pt-6 pb-0 sticky top-0 z-10"
+          style={{ backgroundColor: 'var(--mars-color-surface-raised)' }}
+        >
           <div>
-            <h2 id="signup-title" className="text-xl font-semibold text-white">
+            <h2 id="signup-title" className="text-xl font-semibold" style={{ color: 'var(--mars-color-text)' }}>
               Create account
             </h2>
-            <p className="mt-0.5 text-sm text-gray-400">Join MARS PaperPulse</p>
+            <p className="mt-0.5 text-sm" style={{ color: 'var(--mars-color-text-secondary)' }}>Join MARS PaperPulse</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="mars-focus-ring p-1.5 rounded-mars-md transition-colors hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text)]"
+            style={{ color: 'var(--mars-color-text-tertiary)' }}
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -157,11 +166,11 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
         <form onSubmit={handleSubmit} noValidate className="px-6 py-6 flex flex-col gap-4">
           {/* Full name (optional) */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-name" className="text-sm font-medium text-gray-300">
-              Full name <span className="text-gray-500 font-normal">(optional)</span>
+            <label htmlFor="signup-name" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
+              Full name <span className="font-normal" style={{ color: 'var(--mars-color-text-tertiary)' }}>(optional)</span>
             </label>
             <div className="relative">
-              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 ref={nameRef}
                 id="signup-name"
@@ -170,21 +179,18 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
                 placeholder="Jane Smith"
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700
-                  text-white placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors"
+                className="mars-input pl-10 pr-4 py-2.5 rounded-mars-md text-sm"
               />
             </div>
           </div>
 
           {/* Email */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-email" className="text-sm font-medium text-gray-300">
+            <label htmlFor="signup-email" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
               Email address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 id="signup-email"
                 type="email"
@@ -193,21 +199,18 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700
-                  text-white placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors"
+                className="mars-input pl-10 pr-4 py-2.5 rounded-mars-md text-sm"
               />
             </div>
           </div>
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-password" className="text-sm font-medium text-gray-300">
+            <label htmlFor="signup-password" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 id="signup-password"
                 type="password"
@@ -217,10 +220,7 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
                 onFocus={() => setShowPolicy(true)}
                 placeholder="••••••••"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700
-                  text-white placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors"
+                className="mars-input pl-10 pr-4 py-2.5 rounded-mars-md text-sm"
               />
             </div>
 
@@ -228,13 +228,13 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
             {password && strength && (
               <div className="flex flex-col gap-1.5 mt-1">
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--mars-color-surface-overlay)' }}>
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${strength.color}`}
                       style={{ width: `${(strength.passed / POLICY.length) * 100}%` }}
                     />
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0 w-20 text-right">{strength.label}</span>
+                  <span className="text-xs shrink-0 w-20 text-right" style={{ color: 'var(--mars-color-text-secondary)' }}>{strength.label}</span>
                 </div>
 
                 {/* Policy checklist */}
@@ -246,9 +246,9 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
                         <li key={rule.label} className="flex items-center gap-1.5 text-xs">
                           {ok
                             ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            : <XCircle      className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                            : <XCircle className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--mars-color-text-disabled)' }} />
                           }
-                          <span className={ok ? 'text-gray-300' : 'text-gray-500'}>
+                          <span style={{ color: ok ? 'var(--mars-color-text-secondary)' : 'var(--mars-color-text-tertiary)' }}>
                             {rule.label}
                           </span>
                         </li>
@@ -262,11 +262,11 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
 
           {/* Confirm password */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-confirm" className="text-sm font-medium text-gray-300">
+            <label htmlFor="signup-confirm" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
               Confirm password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 id="signup-confirm"
                 type="password"
@@ -275,21 +275,25 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
                 onChange={e => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className={`w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border text-white
-                  placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors
-                  ${confirmPassword && !passwordsMatch ? 'border-red-600' : 'border-gray-700'}`}
+                className="mars-input pl-10 pr-4 py-2.5 rounded-mars-md text-sm"
+                style={confirmPassword && !passwordsMatch ? { borderColor: 'var(--mars-color-danger)' } : undefined}
               />
             </div>
             {confirmPassword && !passwordsMatch && (
-              <p className="text-xs text-red-400">Passwords do not match.</p>
+              <p className="text-xs" style={{ color: 'var(--mars-color-danger)' }}>Passwords do not match.</p>
             )}
           </div>
 
           {/* Error banner */}
           {error && (
-            <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300 text-sm">
+            <div
+              className="flex items-start gap-2.5 px-4 py-3 rounded-mars-md text-sm"
+              style={{
+                backgroundColor: 'var(--mars-color-danger-subtle)',
+                border: '1px solid color-mix(in srgb, var(--mars-color-danger) 40%, transparent)',
+                color: 'var(--mars-color-danger)',
+              }}
+            >
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -299,12 +303,11 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
           <button
             type="submit"
             disabled={loading || !email.trim() || !password || !confirmPassword}
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg
-              text-sm font-semibold text-white
-              bg-gradient-to-r from-violet-600 to-indigo-600
-              hover:from-violet-500 hover:to-indigo-500
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-150 shadow-lg shadow-violet-900/30"
+            className="mars-focus-ring flex items-center justify-center gap-2 w-full py-2.5 rounded-mars-md
+              text-sm font-semibold text-white bg-brand-gradient shadow-glow-sm
+              hover:-translate-y-px hover:shadow-glow active:translate-y-0
+              disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0
+              transition-all duration-mars-fast ease-mars"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -314,11 +317,12 @@ export default function SignupModal({ open, onClose, onSwitchToLogin, onSignedUp
         </form>
 
         {/* Footer */}
-        <div className="px-6 pb-6 text-center text-sm text-gray-400">
+        <div className="px-6 pb-6 text-center text-sm" style={{ color: 'var(--mars-color-text-secondary)' }}>
           Already have an account?{' '}
           <button
             onClick={() => { setError(null); onSwitchToLogin() }}
-            className="text-violet-400 hover:text-violet-300 font-medium underline underline-offset-2 transition-colors"
+            className="font-medium underline underline-offset-2 transition-colors hover:opacity-80"
+            style={{ color: 'var(--mars-color-primary-text)' }}
           >
             Sign in
           </button>

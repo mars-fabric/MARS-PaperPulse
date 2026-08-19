@@ -20,6 +20,10 @@ export const config = {
   debug: process.env.NEXT_PUBLIC_DEBUG === 'true',
 };
 
+// Maximum upload size (must match backend CMBAGENT_MAX_FILE_SIZE_MB).
+export const MAX_UPLOAD_MB = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 50;
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 /**
  * Get the full API URL for a given endpoint.
  * In the browser, returns a relative path so requests go through the Next.js

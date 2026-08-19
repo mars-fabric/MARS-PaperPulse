@@ -18,9 +18,9 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
   return (
     <>
       <header
-        className="flex-shrink-0 border-b"
+        className="flex-shrink-0 border-b backdrop-blur-xl"
         style={{
-          backgroundColor: 'var(--mars-color-surface-raised)',
+          backgroundColor: 'color-mix(in srgb, var(--mars-color-surface-raised) 85%, transparent)',
           borderColor: 'var(--mars-color-border)',
         }}
         role="banner"
@@ -31,10 +31,7 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
         >
           {/* Left: App Name */}
           <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
-            >
+            <div className="w-8 h-8 rounded-mars-md flex items-center justify-center bg-brand-gradient shadow-glow-sm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -61,8 +58,8 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
             {rightSlot}
             <button
               onClick={() => setShowSettings(true)}
-              className="p-2 rounded-lg transition-colors duration-150
-                hover:bg-[var(--mars-color-bg-hover)]"
+              className="mars-focus-ring p-2 rounded-mars-md transition-colors duration-mars-fast
+                hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text)]"
               style={{ color: 'var(--mars-color-text-secondary)' }}
               aria-label="LLM Provider Settings"
               title="LLM Provider Settings"
@@ -72,8 +69,8 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
 
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg transition-colors duration-150
-                hover:bg-[var(--mars-color-bg-hover)]"
+              className="mars-focus-ring p-2 rounded-mars-md transition-colors duration-mars-fast
+                hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text)]"
               style={{ color: 'var(--mars-color-text-secondary)' }}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               title={`${theme === 'dark' ? 'Light' : 'Dark'} mode`}
@@ -83,11 +80,9 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
 
             <button
               onClick={onNewSession}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                text-white transition-all duration-150 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-              }}
+              className="mars-focus-ring flex items-center gap-1.5 px-3 py-1.5 rounded-mars-md text-xs font-semibold
+                text-white bg-brand-gradient shadow-glow-sm transition-all duration-mars-fast ease-mars
+                hover:-translate-y-px hover:shadow-glow active:translate-y-0"
             >
               <Plus className="w-3.5 h-3.5" />
               New Session

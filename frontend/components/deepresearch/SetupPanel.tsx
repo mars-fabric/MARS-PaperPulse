@@ -62,12 +62,12 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
   const hasUploadedFiles = uploadedFiles.some(f => f.status === 'done')
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 mars-animate-in">
 
       {/* Research description */}
       <div>
         <label
-          className="block text-sm font-medium mb-2"
+          className="block text-sm font-semibold mb-2"
           style={{ color: 'var(--mars-color-text)' }}
         >
           Research Description
@@ -77,15 +77,10 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe your research question, area of investigation, or the study you want to pursue..."
           rows={5}
-          className="w-full rounded-mars-md border p-3 text-sm resize-none outline-none transition-colors"
-          style={{
-            backgroundColor: 'var(--mars-color-surface)',
-            borderColor: 'var(--mars-color-border)',
-            color: 'var(--mars-color-text)',
-          }}
+          className="mars-input w-full rounded-mars-md p-3 text-sm resize-none"
         />
         <p
-          className="text-xs mt-1"
+          className="text-xs mt-1.5"
           style={{ color: 'var(--mars-color-text-tertiary)' }}
         >
           Be specific about your research goals. The AI will generate ideas based on this description and your uploaded data.
@@ -95,7 +90,7 @@ export default function SetupPanel({ hook, onNext }: SetupPanelProps) {
       {/* Research data files */}
       <div>
         <label
-          className="block text-sm font-medium mb-2"
+          className="block text-sm font-semibold mb-2"
           style={{ color: 'var(--mars-color-text)' }}
         >
           Research Data Files

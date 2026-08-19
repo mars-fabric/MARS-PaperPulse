@@ -57,36 +57,38 @@ p, h1, h2, h3, h4, h5, h6 {
 :root,
 [data-theme="dark"] {
   /* --- Colors --- */
-  --mars-color-primary: #3B82F6;
-  --mars-color-primary-hover: #2563EB;
-  --mars-color-primary-active: #1D4ED8;
-  --mars-color-primary-subtle: rgba(59, 130, 246, 0.15);
-  --mars-color-primary-text: #93C5FD;
+  /* Brand unified on indigo→violet (matches the app's gradient identity) */
+  --mars-color-primary: #6366F1;
+  --mars-color-primary-hover: #818CF8;
+  --mars-color-primary-active: #4F46E5;
+  --mars-color-primary-subtle: rgba(99, 102, 241, 0.14);
+  --mars-color-primary-text: #C7D2FE;
 
   --mars-color-accent: #22C55E;
   --mars-color-accent-hover: #16A34A;
   --mars-color-accent-subtle: rgba(34, 197, 94, 0.15);
 
-  --mars-color-surface: #0B1220;
-  --mars-color-surface-raised: #111827;
-  --mars-color-surface-overlay: #1F2937;
-  --mars-color-surface-sunken: #060A12;
+  /* Deep, cool near-black surfaces with clear elevation steps */
+  --mars-color-surface: #0A0E1A;
+  --mars-color-surface-raised: #121826;
+  --mars-color-surface-overlay: #1C2333;
+  --mars-color-surface-sunken: #070A12;
 
-  --mars-color-bg: #0B1220;
-  --mars-color-bg-secondary: #111827;
-  --mars-color-bg-tertiary: #1F2937;
+  --mars-color-bg: #0A0E1A;
+  --mars-color-bg-secondary: #121826;
+  --mars-color-bg-tertiary: #1C2333;
   --mars-color-bg-hover: rgba(255, 255, 255, 0.05);
   --mars-color-bg-active: rgba(255, 255, 255, 0.08);
 
-  --mars-color-text: #F9FAFB;
+  --mars-color-text: #F8FAFC;
   --mars-color-text-secondary: #9CA3AF;
   --mars-color-text-tertiary: #6B7280;
   --mars-color-text-disabled: #4B5563;
   --mars-color-text-inverse: #111827;
 
-  --mars-color-border: rgba(255, 255, 255, 0.1);
-  --mars-color-border-strong: rgba(255, 255, 255, 0.2);
-  --mars-color-border-subtle: rgba(255, 255, 255, 0.05);
+  --mars-color-border: rgba(255, 255, 255, 0.08);
+  --mars-color-border-strong: rgba(255, 255, 255, 0.16);
+  --mars-color-border-subtle: rgba(255, 255, 255, 0.04);
 
   --mars-color-success: #22C55E;
   --mars-color-success-subtle: rgba(34, 197, 94, 0.15);
@@ -94,12 +96,20 @@ p, h1, h2, h3, h4, h5, h6 {
   --mars-color-warning-subtle: rgba(245, 158, 11, 0.15);
   --mars-color-danger: #EF4444;
   --mars-color-danger-subtle: rgba(239, 68, 68, 0.15);
-  --mars-color-info: #3B82F6;
-  --mars-color-info-subtle: rgba(59, 130, 246, 0.15);
+  --mars-color-info: #6366F1;
+  --mars-color-info-subtle: rgba(99, 102, 241, 0.14);
 
   /* Console-specific */
   --mars-color-console-bg: #0D1117;
   --mars-color-console-text: #E5E5E5;
+
+  /* --- Brand Gradients & Glow (single source for the indigo→violet identity) --- */
+  --mars-gradient-brand: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+  --mars-gradient-brand-hover: linear-gradient(135deg, #9B7BF9 0%, #7C7FF5 100%);
+  --mars-gradient-brand-text: linear-gradient(120deg, #A78BFA 0%, #818CF8 50%, #6366F1 100%);
+  --mars-color-primary-glow: rgba(99, 102, 241, 0.35);
+  --mars-shadow-glow: 0 8px 28px -6px rgba(99, 102, 241, 0.45);
+  --mars-shadow-glow-sm: 0 4px 14px -4px rgba(99, 102, 241, 0.4);
 
   /* --- Spacing Scale (4px base) --- */
   --mars-space-0: 0;
@@ -186,12 +196,12 @@ p, h1, h2, h3, h4, h5, h6 {
    Surfaces use layered whites for depth; borders are solid for clarity.
    -------------------------------------------------------------------------- */
 [data-theme="light"] {
-  /* --- Primary (richer blue, good on light bg) --- */
-  --mars-color-primary: #2563EB;
-  --mars-color-primary-hover: #1D4ED8;
-  --mars-color-primary-active: #1E40AF;
-  --mars-color-primary-subtle: rgba(37, 99, 235, 0.08);
-  --mars-color-primary-text: #1E40AF;
+  /* --- Primary (indigo to match the brand identity, tuned for light bg) --- */
+  --mars-color-primary: #6366F1;
+  --mars-color-primary-hover: #4F46E5;
+  --mars-color-primary-active: #4338CA;
+  --mars-color-primary-subtle: rgba(99, 102, 241, 0.10);
+  --mars-color-primary-text: #4338CA;
 
   /* --- Accent --- */
   --mars-color-accent: #059669;
@@ -229,12 +239,17 @@ p, h1, h2, h3, h4, h5, h6 {
   --mars-color-warning-subtle: rgba(217, 119, 6, 0.08);
   --mars-color-danger: #DC2626;
   --mars-color-danger-subtle: rgba(220, 38, 38, 0.08);
-  --mars-color-info: #2563EB;
-  --mars-color-info-subtle: rgba(37, 99, 235, 0.08);
+  --mars-color-info: #6366F1;
+  --mars-color-info-subtle: rgba(99, 102, 241, 0.10);
 
   /* --- Console (stays dark even in light mode) --- */
   --mars-color-console-bg: #1E293B;
   --mars-color-console-text: #E2E8F0;
+
+  /* --- Brand glow softened for light surfaces --- */
+  --mars-color-primary-glow: rgba(99, 102, 241, 0.22);
+  --mars-shadow-glow: 0 8px 28px -8px rgba(99, 102, 241, 0.35);
+  --mars-shadow-glow-sm: 0 4px 14px -6px rgba(99, 102, 241, 0.28);
 
   /* --- Shadows (more visible to create depth on light bg) --- */
   --mars-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
@@ -366,7 +381,7 @@ code, pre, kbd, samp {
 
 /* Modern Gradient Utilities */
 .mars-gradient-primary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%);
+  background: var(--mars-gradient-brand);
 }
 
 .mars-gradient-success {
@@ -385,6 +400,79 @@ code, pre, kbd, samp {
   background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
 }
 
+/* Gradient text — for premium headlines & stat numbers */
+.mars-gradient-text {
+  background: var(--mars-gradient-brand-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Frosted-glass panel (Notion / Vercel style) */
+.mars-glass {
+  background-color: color-mix(in srgb, var(--mars-color-surface-raised) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--mars-color-border);
+}
+
+/* Subtle lift on hover — reusable across cards & tiles */
+.mars-hover-lift {
+  transition: transform var(--mars-duration-normal) var(--mars-ease-standard),
+              box-shadow var(--mars-duration-normal) var(--mars-ease-standard),
+              border-color var(--mars-duration-normal) var(--mars-ease-standard);
+  will-change: transform;
+}
+
+.mars-hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--mars-shadow-lg);
+  border-color: var(--mars-color-border-strong);
+}
+
+/* Interactive card — combines surface, border, radius and hover lift */
+.mars-card-interactive {
+  background-color: var(--mars-color-surface-raised);
+  border: 1px solid var(--mars-color-border);
+  border-radius: var(--mars-radius-lg);
+  transition: transform var(--mars-duration-normal) var(--mars-ease-standard),
+              box-shadow var(--mars-duration-normal) var(--mars-ease-standard),
+              border-color var(--mars-duration-normal) var(--mars-ease-standard),
+              background-color var(--mars-duration-normal) var(--mars-ease-standard);
+}
+
+.mars-card-interactive:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--mars-shadow-lg);
+  border-color: var(--mars-color-border-strong);
+}
+
+/* Primary focus ring — consistent, accessible focus affordance */
+.mars-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mars-color-bg), 0 0 0 4px var(--mars-color-primary);
+}
+
+/* Entrance animations — staggered content reveal */
+.mars-animate-in {
+  animation: mars-slide-up var(--mars-duration-slow) var(--mars-ease-standard) both;
+}
+
+.mars-animate-scale-in {
+  animation: mars-scale-in var(--mars-duration-normal) var(--mars-ease-standard) both;
+}
+
+.mars-animate-fade-in {
+  animation: mars-fade-in var(--mars-duration-slow) var(--mars-ease-standard) both;
+}
+
+.mars-delay-1 { animation-delay: 60ms; }
+.mars-delay-2 { animation-delay: 120ms; }
+.mars-delay-3 { animation-delay: 180ms; }
+.mars-delay-4 { animation-delay: 240ms; }
+.mars-delay-5 { animation-delay: 300ms; }
+
 /* Modern Card Styles */
 .mars-card {
   background-color: var(--mars-color-surface);
@@ -395,7 +483,7 @@ code, pre, kbd, samp {
 
 .mars-card:hover {
   border-color: var(--mars-color-border-strong);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--mars-shadow-lg);
 }
 
 .mars-card-elevated {
@@ -425,14 +513,19 @@ code, pre, kbd, samp {
 }
 
 .mars-btn-primary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  background: var(--mars-gradient-brand);
   color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: var(--mars-shadow-glow-sm);
 }
 
 .mars-btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+  background: var(--mars-gradient-brand-hover);
+  box-shadow: var(--mars-shadow-glow);
+}
+
+.mars-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .mars-btn-secondary {
@@ -465,6 +558,36 @@ code, pre, kbd, samp {
 .mars-btn-lg {
   padding: 0.875rem 1.5rem;
   font-size: var(--mars-text-base);
+}
+
+/* Form Inputs — token-backed, theme-aware, consistent focus affordance */
+.mars-input {
+  width: 100%;
+  background-color: var(--mars-color-surface-sunken);
+  border: 1px solid var(--mars-color-border);
+  color: var(--mars-color-text);
+  transition: border-color var(--mars-duration-fast) var(--mars-ease-standard),
+              box-shadow var(--mars-duration-fast) var(--mars-ease-standard),
+              background-color var(--mars-duration-fast) var(--mars-ease-standard);
+}
+
+.mars-input::placeholder {
+  color: var(--mars-color-text-tertiary);
+}
+
+.mars-input:hover:not(:disabled):not(:focus) {
+  border-color: var(--mars-color-border-strong);
+}
+
+.mars-input:focus {
+  outline: none;
+  border-color: var(--mars-color-primary);
+  box-shadow: 0 0 0 3px var(--mars-color-primary-subtle);
+}
+
+.mars-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* --------------------------------------------------------------------------

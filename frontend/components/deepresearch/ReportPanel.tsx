@@ -506,7 +506,7 @@ export default function ReportPanel({ hook, onBack }: ReportPanelProps) {
   // ── Pre-execution: stage 4 not started ────────────────────────────────────
   if (isStage4NotStarted && !isExecuting) {
     return (
-      <div className="max-w-3xl mx-auto space-y-3">
+      <div className="max-w-3xl mx-auto space-y-3 mars-animate-in">
         <div className="flex items-center justify-between py-2">
           <span className="text-sm font-semibold" style={{ color: 'var(--mars-color-text)' }}>
             Deep Scientific Research
@@ -561,7 +561,7 @@ export default function ReportPanel({ hook, onBack }: ReportPanelProps) {
 
   // ── Completed / failed stage 4 view ──────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 mars-animate-in">
 
       {/* ── Stage 4 error / retry ────────────────────────────────────────── */}
       {isStage4Failed && (

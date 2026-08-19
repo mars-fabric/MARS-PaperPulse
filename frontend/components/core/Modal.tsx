@@ -90,7 +90,7 @@ export default function Modal({
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 animate-[mars-fade-in_var(--mars-duration-fast)_var(--mars-ease-standard)]"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[mars-fade-in_var(--mars-duration-fast)_var(--mars-ease-standard)]"
         onClick={closeOnBackdrop ? onClose : undefined}
         aria-hidden="true"
       />
@@ -110,6 +110,7 @@ export default function Modal({
           maxHeight: '90vh',
           backgroundColor: 'var(--mars-color-surface-raised)',
           border: '1px solid var(--mars-color-border)',
+          boxShadow: 'var(--mars-shadow-xl), 0 0 0 1px var(--mars-color-border-subtle)',
           zIndex: 'var(--mars-z-modal)',
         }}
       >

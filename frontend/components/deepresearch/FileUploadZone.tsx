@@ -3,6 +3,12 @@
 import React, { useState, useCallback, useRef } from 'react'
 import { Upload, X, FileIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import type { UploadedFile } from '@/types/deepresearch'
+import { MAX_UPLOAD_MB } from '@/lib/config'
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024).toFixed(1)} KB`
+}
 
 interface FileUploadZoneProps {
   files: UploadedFile[]
@@ -58,20 +64,25 @@ export default function FileUploadZone({ files, onUpload, disabled }: FileUpload
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className="cursor-pointer rounded-mars-md border-2 border-dashed p-6 text-center transition-colors"
-        style={{
-          borderColor: isDragging ? 'var(--mars-color-primary)' : 'var(--mars-color-border)',
-          backgroundColor: isDragging ? 'var(--mars-color-primary-subtle)' : 'transparent',
-          opacity: disabled ? 0.5 : 1,
-        }}
+        className={`group cursor-pointer rounded-mars-lg border-2 border-dashed p-8 text-center transition-all duration-mars-normal ${
+          isDragging
+            ? 'border-[var(--mars-color-primary)] bg-[var(--mars-color-primary-subtle)] scale-[1.01]'
+            : 'border-[var(--mars-color-border-strong)] hover:border-[var(--mars-color-primary)] hover:bg-[var(--mars-color-bg-hover)]'
+        }`}
+        style={{ opacity: disabled ? 0.5 : 1 }}
       >
-        <Upload
-          className="w-8 h-8 mx-auto mb-2"
-          style={{ color: 'var(--mars-color-text-tertiary)' }}
-        />
+        <div
+          className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center transition-transform duration-mars-normal group-hover:scale-110"
+          style={{ backgroundColor: isDragging ? 'var(--mars-color-primary-subtle)' : 'var(--mars-color-surface-overlay)' }}
+        >
+          <Upload
+            className="w-5 h-5"
+            style={{ color: isDragging ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)' }}
+          />
+        </div>
         <p
-          className="text-sm font-medium"
-          style={{ color: 'var(--mars-color-text-secondary)' }}
+          className="text-sm font-semibold"
+          style={{ color: 'var(--mars-color-text)' }}
         >
           Drop files here or click to browse
         </p>
@@ -79,7 +90,7 @@ export default function FileUploadZone({ files, onUpload, disabled }: FileUpload
           className="text-xs mt-1"
           style={{ color: 'var(--mars-color-text-tertiary)' }}
         >
-          CSV, Excel, PDF, Word, JSON, TXT, and more (max 50MB)
+          CSV, Excel, PDF, Word, JSON, TXT, and more (max {MAX_UPLOAD_MB}MB)
         </p>
         <input
           ref={inputRef}
@@ -92,21 +103,27 @@ export default function FileUploadZone({ files, onUpload, disabled }: FileUpload
 
       {/* File list */}
       {files.length > 0 && (
-        <div className="mt-3 space-y-1">
+        <div className="mt-3 space-y-1.5">
           {files.map((f, i) => (
             <div
               key={`${f.name}-${i}`}
-              className="flex items-center gap-2 px-3 py-2 rounded-mars-sm text-xs"
+              className="px-3 py-2 rounded-mars-md text-xs border transition-colors"
               style={{
-                backgroundColor: 'var(--mars-color-surface-overlay)',
+                backgroundColor: 'var(--mars-color-surface)',
+                borderColor: f.status === 'error' ? 'var(--mars-color-danger)' : 'var(--mars-color-border)',
                 color: 'var(--mars-color-text-secondary)',
               }}
             >
-              {statusIcon(f.status)}
-              <span className="flex-1 truncate">{f.name}</span>
-              <span style={{ color: 'var(--mars-color-text-tertiary)' }}>
-                {(f.size / 1024).toFixed(1)} KB
-              </span>
+              <div className="flex items-center gap-2">
+                {statusIcon(f.status)}
+                <span className="flex-1 truncate font-medium" style={{ color: 'var(--mars-color-text)' }}>{f.name}</span>
+                <span className="tabular-nums" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                  {formatSize(f.size)}
+                </span>
+              </div>
+              {f.status === 'error' && f.error && (
+                <p className="mt-1 pl-6" style={{ color: 'var(--mars-color-danger)' }}>{f.error}</p>
+              )}
             </div>
           ))}
         </div>

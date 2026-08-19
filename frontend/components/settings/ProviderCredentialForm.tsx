@@ -222,12 +222,9 @@ export default function ProviderCredentialForm({
         <button
           onClick={handleSave}
           disabled={!hasRequiredFields || saving}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all
+          className="mars-focus-ring px-3 py-1.5 rounded-mars-md text-xs font-semibold text-white transition-all
             disabled:opacity-40 disabled:cursor-not-allowed
-            hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-          }}
+            bg-brand-gradient shadow-glow-sm hover:-translate-y-px hover:shadow-glow active:translate-y-0"
         >
           {saving ? 'Saving...' : 'Save & Connect'}
         </button>

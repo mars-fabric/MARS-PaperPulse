@@ -3,7 +3,7 @@
 import React, { forwardRef } from 'react'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+  variant?: 'primary' | 'gradient' | 'secondary' | 'ghost' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   icon?: React.ReactNode
@@ -11,27 +11,17 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   fullWidth?: boolean
 }
 
-const variantStyles: Record<string, React.CSSProperties> = {
-  primary: {
-    backgroundColor: 'var(--mars-color-primary)',
-    color: 'white',
-    borderColor: 'transparent',
-  },
-  secondary: {
-    backgroundColor: 'transparent',
-    color: 'var(--mars-color-text)',
-    borderColor: 'var(--mars-color-border-strong)',
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    color: 'var(--mars-color-text-secondary)',
-    borderColor: 'transparent',
-  },
-  danger: {
-    backgroundColor: 'var(--mars-color-danger)',
-    color: 'white',
-    borderColor: 'transparent',
-  },
+const variantClasses: Record<string, string> = {
+  primary:
+    'bg-[var(--mars-color-primary)] text-white border-transparent shadow-sm hover:bg-[var(--mars-color-primary-hover)] active:bg-[var(--mars-color-primary-active)]',
+  gradient:
+    'bg-brand-gradient text-white border-transparent shadow-glow-sm hover:shadow-glow hover:-translate-y-px active:translate-y-0',
+  secondary:
+    'bg-transparent text-[var(--mars-color-text)] border-[var(--mars-color-border-strong)] hover:bg-[var(--mars-color-bg-hover)] hover:border-[var(--mars-color-border-strong)] active:bg-[var(--mars-color-bg-active)]',
+  ghost:
+    'bg-transparent text-[var(--mars-color-text-secondary)] border-transparent hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text)] active:bg-[var(--mars-color-bg-active)]',
+  danger:
+    'bg-[var(--mars-color-danger)] text-white border-transparent hover:brightness-110 active:brightness-95',
 }
 
 const sizeClasses: Record<string, string> = {
@@ -62,33 +52,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       ref={ref}
       disabled={isDisabled}
       className={`
-        inline-flex items-center justify-center font-medium
-        rounded-mars-md border transition-colors duration-mars-fast
+        mars-focus-ring inline-flex items-center justify-center font-medium
+        rounded-mars-md border transition-all duration-mars-fast ease-mars
         ${sizeClasses[size]}
+        ${variantClasses[variant]}
         ${fullWidth ? 'w-full' : ''}
-        ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        ${isDisabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}
         ${className}
       `}
-      style={{
-        ...variantStyles[variant],
-        ...(isDisabled ? {} : {}),
-      }}
-      onMouseEnter={(e) => {
-        if (!isDisabled) {
-          const target = e.currentTarget
-          if (variant === 'primary') target.style.backgroundColor = 'var(--mars-color-primary-hover)'
-          else if (variant === 'secondary') target.style.backgroundColor = 'var(--mars-color-bg-hover)'
-          else if (variant === 'ghost') target.style.backgroundColor = 'var(--mars-color-bg-hover)'
-          else if (variant === 'danger') target.style.backgroundColor = '#DC2626'
-        }
-        props.onMouseEnter?.(e)
-      }}
-      onMouseLeave={(e) => {
-        if (!isDisabled) {
-          e.currentTarget.style.backgroundColor = variantStyles[variant].backgroundColor as string
-        }
-        props.onMouseLeave?.(e)
-      }}
       {...props}
     >
       {loading && (

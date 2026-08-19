@@ -34,8 +34,12 @@ function RoleBadge({ role }: { role: 'admin' | 'user' }) {
     )
   }
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium
-      bg-gray-700/60 text-gray-400 border border-gray-600/30">
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+      style={{
+        backgroundColor: 'var(--mars-color-surface-overlay)',
+        color: 'var(--mars-color-text-tertiary)',
+        border: '1px solid var(--mars-color-border)',
+      }}>
       User
     </span>
   )
@@ -93,14 +97,13 @@ export default function UserMenu() {
         onClick={() => setOpen(v => !v)}
         aria-haspopup="true"
         aria-expanded={open}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
-          text-gray-300 hover:text-white hover:bg-gray-800/60
-          transition-colors duration-150"
+        className="mars-focus-ring flex items-center gap-2 px-2.5 py-1.5 rounded-mars-md
+          transition-colors duration-150 hover:bg-[var(--mars-color-bg-hover)]"
+        style={{ color: 'var(--mars-color-text-secondary)' }}
       >
         {/* Avatar */}
         <span
-          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white select-none"
-          style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
+          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white select-none bg-brand-gradient"
           aria-hidden="true"
         >
           {initials}
@@ -115,24 +118,26 @@ export default function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-1.5 w-56 rounded-xl shadow-2xl
-            bg-gray-900 border border-gray-700/70 py-1.5 z-50
-            animate-[mars-fade-in_0.1s_ease-out]"
+          className="absolute right-0 top-full mt-1.5 w-56 rounded-mars-lg shadow-mars-xl py-1.5 z-dropdown
+            animate-[mars-scale-in_var(--mars-duration-fast)_var(--mars-ease-standard)]"
+          style={{
+            backgroundColor: 'var(--mars-color-surface-raised)',
+            border: '1px solid var(--mars-color-border)',
+          }}
         >
           {/* User info header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700/50">
+          <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--mars-color-border)' }}>
             <span
-              className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-              style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 bg-brand-gradient"
             >
               {initials}
             </span>
             <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="text-sm font-semibold text-white truncate" title={displayName}>
+              <span className="text-sm font-semibold truncate" style={{ color: 'var(--mars-color-text)' }} title={displayName}>
                 {displayName}
               </span>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-400 truncate max-w-[110px]" title={user.email}>
+                <span className="text-xs truncate max-w-[110px]" style={{ color: 'var(--mars-color-text-tertiary)' }} title={user.email}>
                   {user.email}
                 </span>
                 <RoleBadge role={user.role} />
@@ -146,8 +151,9 @@ export default function UserMenu() {
               href="/admin"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300
-                hover:text-white hover:bg-gray-800/70 transition-colors"
+              className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors
+                hover:bg-[var(--mars-color-bg-hover)]"
+              style={{ color: 'var(--mars-color-text-secondary)' }}
             >
               <ShieldCheck className="w-4 h-4 text-amber-400" />
               Admin Panel
@@ -155,15 +161,15 @@ export default function UserMenu() {
           )}
 
           {/* Divider before logout */}
-          <div className="my-1 border-t border-gray-700/50" />
+          <div className="my-1 border-t" style={{ borderColor: 'var(--mars-color-border)' }} />
 
           {/* Logout */}
           <button
             role="menuitem"
             onClick={handleLogout}
             disabled={loggingOut}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300
-              hover:text-red-400 hover:bg-red-500/10 transition-colors
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors
+              text-[var(--mars-color-text-secondary)] hover:text-[var(--mars-color-danger)] hover:bg-[var(--mars-color-danger-subtle)]
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loggingOut ? (

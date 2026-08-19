@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { Send, Check, Loader2, AlertTriangle } from 'lucide-react'
+import { Send, Check, Loader2, AlertTriangle, Sparkles, MessageSquare } from 'lucide-react'
 import type { RefinementMessage } from '@/types/deepresearch'
 
 interface RefinementChatProps {
@@ -98,57 +98,71 @@ export default function RefinementChat({ messages, onSend, onApply, isLoading }:
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
-        className="px-4 py-3 border-b flex-shrink-0"
-        style={{ borderColor: 'var(--mars-color-border)' }}
+        className="flex items-center gap-2.5 px-4 py-3 border-b flex-shrink-0"
+        style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
       >
-        <p
-          className="text-sm font-medium"
-          style={{ color: 'var(--mars-color-text)' }}
+        <div
+          className="w-7 h-7 rounded-mars-md flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: 'var(--mars-color-primary-subtle)' }}
         >
-          Refinement Chat
-        </p>
-        <p
-          className="text-xs"
-          style={{ color: 'var(--mars-color-text-tertiary)' }}
-        >
-          Ask the AI to modify or improve the content
-        </p>
+          <Sparkles className="w-4 h-4" style={{ color: 'var(--mars-color-primary)' }} />
+        </div>
+        <div>
+          <p
+            className="text-sm font-semibold leading-tight"
+            style={{ color: 'var(--mars-color-text)' }}
+          >
+            Refinement Chat
+          </p>
+          <p
+            className="text-xs"
+            style={{ color: 'var(--mars-color-text-tertiary)' }}
+          >
+            Ask the AI to modify or improve the content
+          </p>
+        </div>
       </div>
 
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 overflow-y-auto p-4 space-y-3 mars-scrollbar"
         style={{ minHeight: 0 }}
       >
         {messages.length === 0 && (
-          <p
-            className="text-xs text-center py-8"
-            style={{ color: 'var(--mars-color-text-tertiary)' }}
-          >
-            Ask the AI to refine the content. For example:
-            &quot;Make the methodology section more specific&quot;
-            or &quot;Focus on weak lensing approaches&quot;
-          </p>
+          <div className="flex flex-col items-center justify-center text-center py-10 px-2">
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+              style={{ backgroundColor: 'var(--mars-color-surface-overlay)' }}
+            >
+              <MessageSquare className="w-6 h-6" style={{ color: 'var(--mars-color-text-tertiary)' }} />
+            </div>
+            <p className="text-xs leading-relaxed max-w-[220px]" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+              Ask the AI to refine the content. For example: &quot;Make the methodology section more specific&quot; or &quot;Focus on weak lensing approaches&quot;
+            </p>
+          </div>
         )}
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
             <div
-              className="max-w-[85%] rounded-mars-md px-3 py-2 text-xs"
+              className="max-w-[85%] rounded-mars-lg px-3 py-2 text-xs"
               style={{
                 backgroundColor: msg.role === 'user'
                   ? 'var(--mars-color-primary-subtle)'
                   : 'var(--mars-color-surface-overlay)',
                 color: 'var(--mars-color-text)',
+                border: msg.role === 'user'
+                  ? '1px solid color-mix(in srgb, var(--mars-color-primary) 25%, transparent)'
+                  : '1px solid var(--mars-color-border)',
               }}
             >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               {msg.role === 'assistant' && (
                 <>
                   <MethodBadge msg={msg} />
                   <button
                     onClick={() => onApply(msg.content)}
-                    className="mt-2 flex items-center gap-1 text-xs font-medium"
+                    className="mars-focus-ring mt-2 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-mars-sm transition-colors hover:bg-[var(--mars-color-primary-subtle)]"
                     style={{ color: 'var(--mars-color-primary)' }}
                   >
                     <Check className="w-3 h-3" />
@@ -177,7 +191,7 @@ export default function RefinementChat({ messages, onSend, onApply, isLoading }:
       {/* Input */}
       <div
         className="px-4 py-3 border-t flex-shrink-0"
-        style={{ borderColor: 'var(--mars-color-border)' }}
+        style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
       >
         <div className="flex items-end gap-2">
           <textarea
@@ -186,25 +200,22 @@ export default function RefinementChat({ messages, onSend, onApply, isLoading }:
             onKeyDown={handleKeyDown}
             placeholder="Describe how to refine..."
             rows={2}
-            className="flex-1 rounded-mars-md border p-2 text-xs resize-none outline-none"
-            style={{
-              backgroundColor: 'var(--mars-color-surface)',
-              borderColor: 'var(--mars-color-border)',
-              color: 'var(--mars-color-text)',
-            }}
+            className="mars-input flex-1 rounded-mars-md p-2.5 text-xs resize-none"
             disabled={sending || isLoading}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || sending}
-            className="p-2 rounded-mars-md transition-colors"
+            className="mars-focus-ring p-2.5 rounded-mars-md transition-all disabled:cursor-not-allowed"
             style={{
-              backgroundColor: input.trim() ? 'var(--mars-color-primary)' : 'var(--mars-color-surface-overlay)',
+              background: input.trim() ? 'var(--mars-gradient-brand)' : 'var(--mars-color-surface-overlay)',
               color: input.trim() ? 'white' : 'var(--mars-color-text-tertiary)',
+              boxShadow: input.trim() ? 'var(--mars-shadow-glow-sm)' : 'none',
               opacity: sending ? 0.5 : 1,
             }}
+            aria-label="Send refinement request"
           >
-            <Send className="w-4 h-4" />
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
       </div>

@@ -144,29 +144,31 @@ export default function StageArtifactsPanel({
 
   return (
     <div
-      className="rounded-mars-md border overflow-hidden"
+      className="rounded-mars-lg border overflow-hidden"
       style={{
-        backgroundColor: 'var(--mars-color-surface)',
+        backgroundColor: 'var(--mars-color-surface-raised)',
         borderColor: 'var(--mars-color-border)',
+        boxShadow: 'var(--mars-shadow-sm)',
       }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: 'var(--mars-color-border)' }}
+        style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
       >
-        <span className="text-sm font-medium" style={{ color: 'var(--mars-color-text)' }}>
+        <span className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--mars-color-text)' }}>
+          <File className="w-4 h-4" style={{ color: 'var(--mars-color-primary)' }} />
           {title}
         </span>
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+          <span className="text-xs tabular-nums" style={{ color: 'var(--mars-color-text-tertiary)' }}>
             {files.length} file{files.length !== 1 ? 's' : ''}
             {totalSize > 0 && ` · ${formatBytes(totalSize)}`}
           </span>
           <button
             onClick={onRefresh}
             title="Refresh"
-            className="p-1 rounded transition-colors"
+            className="mars-focus-ring p-1.5 rounded-mars-sm transition-colors hover:bg-[var(--mars-color-bg-hover)]"
             style={{ color: 'var(--mars-color-text-secondary)' }}
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -174,7 +176,7 @@ export default function StageArtifactsPanel({
           <button
             onClick={handleDownloadAll}
             title="Download all files in current tab"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-mars-sm text-xs font-medium border transition-colors"
+            className="mars-focus-ring flex items-center gap-1.5 px-2.5 py-1 rounded-mars-sm text-xs font-medium border transition-colors hover:bg-[var(--mars-color-bg-hover)]"
             style={{
               borderColor: 'var(--mars-color-border)',
               color: 'var(--mars-color-text-secondary)',
@@ -190,26 +192,26 @@ export default function StageArtifactsPanel({
       {availableTabs.length > 1 && (
         <div
           className="flex border-b"
-          style={{ borderColor: 'var(--mars-color-border)' }}
+          style={{ borderColor: 'var(--mars-color-border)', backgroundColor: 'var(--mars-color-surface)' }}
         >
           {availableTabs.map(cat => (
             <button
               key={cat}
               onClick={() => setActiveTab(cat)}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors"
+              className="mars-focus-ring flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors"
               style={{
-                color: activeTab === cat ? 'var(--mars-color-accent)' : 'var(--mars-color-text-secondary)',
-                borderBottom: activeTab === cat ? '2px solid var(--mars-color-accent)' : '2px solid transparent',
+                color: activeTab === cat ? 'var(--mars-color-primary)' : 'var(--mars-color-text-secondary)',
+                borderBottom: activeTab === cat ? '2px solid var(--mars-color-primary)' : '2px solid transparent',
               }}
             >
               {cat}
               <span
-                className="inline-flex items-center justify-center rounded-full text-xs px-1.5 py-0.5 min-w-[20px]"
+                className="inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1.5 py-0.5 min-w-[20px]"
                 style={{
                   backgroundColor: activeTab === cat
-                    ? 'var(--mars-color-accent-subtle, rgba(99,102,241,0.15))'
+                    ? 'var(--mars-color-primary-subtle)'
                     : 'var(--mars-color-surface-overlay)',
-                  color: activeTab === cat ? 'var(--mars-color-accent)' : 'var(--mars-color-text-tertiary)',
+                  color: activeTab === cat ? 'var(--mars-color-primary)' : 'var(--mars-color-text-tertiary)',
                 }}
               >
                 {categorized[cat].length}
@@ -233,10 +235,10 @@ export default function StageArtifactsPanel({
             return (
               <div
                 key={path}
-                className="flex items-center gap-3 px-4 py-2.5"
+                className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--mars-color-surface-overlay)]"
                 style={{ borderColor: 'var(--mars-color-border)' }}
               >
-                <span style={{ color: 'var(--mars-color-text-tertiary)', flexShrink: 0 }}>
+                <span style={{ color: 'var(--mars-color-primary)', flexShrink: 0 }}>
                   {getFileIcon(path)}
                 </span>
                 <span
@@ -247,13 +249,13 @@ export default function StageArtifactsPanel({
                   {fileName}
                 </span>
                 {size !== undefined && (
-                  <span className="text-xs shrink-0" style={{ color: 'var(--mars-color-text-tertiary)' }}>
+                  <span className="text-xs shrink-0 tabular-nums" style={{ color: 'var(--mars-color-text-tertiary)' }}>
                     {formatBytes(size)}
                   </span>
                 )}
                 <button
                   onClick={() => setPreviewFile({ path, name: fileName })}
-                  className="flex items-center gap-1 text-xs font-medium shrink-0 ml-1 px-2 py-1 rounded-mars-sm transition-colors"
+                  className="mars-focus-ring flex items-center gap-1 text-xs font-medium shrink-0 ml-1 px-2 py-1 rounded-mars-sm transition-colors hover:brightness-110"
                   style={{
                     color: 'var(--mars-color-primary)',
                     backgroundColor: 'var(--mars-color-primary-subtle)',
@@ -266,7 +268,7 @@ export default function StageArtifactsPanel({
                 <a
                   href={downloadUrl}
                   download={fileName}
-                  className="flex items-center gap-1 text-xs font-medium shrink-0"
+                  className="mars-focus-ring flex items-center gap-1 text-xs font-medium shrink-0 px-2 py-1 rounded-mars-sm transition-colors hover:bg-[var(--mars-color-primary-subtle)]"
                   style={{ color: 'var(--mars-color-primary)' }}
                 >
                   <Download className="w-3.5 h-3.5" />

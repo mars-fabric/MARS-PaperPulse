@@ -101,12 +101,12 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
   }, [deleteTask, onBack])
 
   return (
-    <div className="p-5 max-w-7xl mx-auto">
+    <div className="p-5 max-w-7xl mx-auto mars-animate-in">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
           onClick={onBack}
-          className="p-1.5 rounded-lg transition-colors hover:bg-[var(--mars-color-surface-overlay)]"
+          className="mars-focus-ring p-2 rounded-mars-md transition-colors hover:bg-[var(--mars-color-bg-hover)]"
           style={{ color: 'var(--mars-color-text-secondary)' }}
           title="Back to home"
         >
@@ -114,7 +114,7 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
         </button>
         <div className="flex-1 min-w-0">
           <h2
-            className="text-lg font-semibold truncate"
+            className="text-lg font-semibold truncate tracking-tight"
             style={{ color: 'var(--mars-color-text)' }}
           >
             {taskState?.task || 'New Research'}
@@ -128,10 +128,11 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
         </div>
         {taskState?.total_cost_usd != null && taskState.total_cost_usd > 0 && (
           <div
-            className="ml-auto text-xs px-3 py-1.5 rounded-mars-md"
+            className="ml-auto text-xs px-3 py-1.5 rounded-mars-md font-medium tabular-nums"
             style={{
               backgroundColor: 'var(--mars-color-surface-overlay)',
               color: 'var(--mars-color-text-secondary)',
+              border: '1px solid var(--mars-color-border)',
             }}
           >
             Cost: ${taskState.total_cost_usd.toFixed(4)}
@@ -166,22 +167,29 @@ export default function DeepresearchResearchTask({ onBack, resumeTaskId }: Deepr
       {/* Error banner */}
       {error && (
         <div
-          className="mb-4 p-3 rounded-mars-md flex items-center justify-between text-sm"
+          className="mb-4 p-3 rounded-mars-md flex items-center justify-between text-sm animate-scale-in"
           style={{
             backgroundColor: 'var(--mars-color-danger-subtle)',
             color: 'var(--mars-color-danger)',
-            border: '1px solid var(--mars-color-danger)',
+            border: '1px solid color-mix(in srgb, var(--mars-color-danger) 40%, transparent)',
           }}
         >
           <span>{error}</span>
-          <button onClick={clearError} className="ml-2 font-medium underline">
+          <button onClick={clearError} className="ml-2 font-medium underline hover:opacity-80">
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Stepper */}
-      <div className="mb-8">
+      {/* Stepper — elevated progress card */}
+      <div
+        className="mb-6 rounded-mars-lg border px-6 py-5"
+        style={{
+          backgroundColor: 'var(--mars-color-surface-raised)',
+          borderColor: 'var(--mars-color-border)',
+          boxShadow: 'var(--mars-shadow-sm)',
+        }}
+      >
         <Stepper steps={stepperSteps} orientation="horizontal" size="sm" onStepClick={handleStepClick} />
       </div>
 

@@ -17,44 +17,42 @@ export interface StepperProps {
   onStepClick?: (index: number) => void
 }
 
-const statusConfig: Record<string, { bg: string; border: string; icon?: React.ReactNode }> = {
-  pending: {
-    bg: 'var(--mars-color-surface-overlay)',
-    border: 'var(--mars-color-border)',
-  },
-  active: {
-    bg: 'var(--mars-color-primary-subtle)',
-    border: 'var(--mars-color-primary)',
-  },
-  completed: {
-    bg: 'var(--mars-color-success-subtle)',
-    border: 'var(--mars-color-success)',
-    icon: <Check className="w-3.5 h-3.5" />,
-  },
-  failed: {
-    bg: 'var(--mars-color-danger-subtle)',
-    border: 'var(--mars-color-danger)',
-    icon: <X className="w-3.5 h-3.5" />,
-  },
-  skipped: {
-    bg: 'var(--mars-color-surface-overlay)',
-    border: 'var(--mars-color-border)',
-    icon: <Minus className="w-3.5 h-3.5" />,
-  },
-}
-
 export default function Stepper({ steps, orientation = 'horizontal', size = 'md', onStepClick }: StepperProps) {
   const isVertical = orientation === 'vertical'
-  const dotSize = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
+  const dotSize = size === 'sm' ? 'w-8 h-8' : 'w-9 h-9'
+
+  const isClickable = (s: StepperStep) =>
+    !!onStepClick && (s.status === 'completed' || s.status === 'active' || s.status === 'failed')
 
   return (
     <div
-      className={`flex ${isVertical ? 'flex-col' : 'items-center'}`}
+      className={`flex ${isVertical ? 'flex-col' : 'items-start'}`}
       role="list"
     >
       {steps.map((step, index) => {
-        const config = statusConfig[step.status]
         const isLast = index === steps.length - 1
+        const clickable = isClickable(step)
+        const done = step.status === 'completed'
+        const active = step.status === 'active'
+        const failed = step.status === 'failed'
+        const skipped = step.status === 'skipped'
+
+        const dotStyle: React.CSSProperties = failed
+          ? { backgroundColor: 'var(--mars-color-danger-subtle)', border: '2px solid var(--mars-color-danger)', color: 'var(--mars-color-danger)' }
+          : done
+            ? { backgroundColor: 'var(--mars-color-primary)', border: '2px solid var(--mars-color-primary)', color: '#fff', boxShadow: 'var(--mars-shadow-glow-sm)' }
+            : active
+              ? { backgroundColor: 'var(--mars-color-surface-raised)', border: '2px solid var(--mars-color-primary)', color: 'var(--mars-color-primary)', boxShadow: '0 0 0 4px var(--mars-color-primary-subtle)' }
+              : { backgroundColor: 'var(--mars-color-surface-overlay)', border: '2px solid var(--mars-color-border)', color: 'var(--mars-color-text-tertiary)' }
+
+        const dotContent = failed ? <X className="w-4 h-4" />
+          : done ? <Check className="w-4 h-4" />
+            : skipped ? <Minus className="w-4 h-4" />
+              : active ? <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                : index + 1
+
+        // Connector after a completed step is filled with the brand color
+        const connectorColor = done ? 'var(--mars-color-primary)' : 'var(--mars-color-border)'
 
         return (
           <div
@@ -66,62 +64,41 @@ export default function Stepper({ steps, orientation = 'horizontal', size = 'md'
               {/* Step Dot */}
               <div
                 className={`${dotSize} flex-shrink-0 rounded-full flex items-center justify-center
-                  text-xs font-medium transition-colors duration-mars-normal
-                  ${onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed') ? 'cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-[var(--mars-color-primary)]' : ''}`}
-                style={{
-                  backgroundColor: config.bg,
-                  border: `2px solid ${config.border}`,
-                  color: step.status === 'active'
-                    ? 'var(--mars-color-primary)'
-                    : step.status === 'completed'
-                      ? 'var(--mars-color-success)'
-                      : step.status === 'failed'
-                        ? 'var(--mars-color-danger)'
-                        : 'var(--mars-color-text-tertiary)',
-                }}
-                onClick={() => {
-                  if (onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed')) {
-                    onStepClick(index)
-                  }
-                }}
-                role={onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed') ? 'button' : undefined}
-                tabIndex={onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed') ? 0 : undefined}
+                  text-xs font-semibold transition-all duration-mars-normal ease-mars
+                  ${clickable ? 'cursor-pointer hover:scale-110 mars-focus-ring' : ''}`}
+                style={dotStyle}
+                onClick={() => { if (clickable) onStepClick!(index) }}
+                onKeyDown={(e) => { if (clickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onStepClick!(index) } }}
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                aria-current={active ? 'step' : undefined}
+                aria-label={`${step.label}${done ? ' (completed)' : active ? ' (current)' : failed ? ' (failed)' : ''}`}
               >
-                {config.icon || (step.status === 'active' ? (
-                  <span className="w-2 h-2 rounded-full bg-current" />
-                ) : (
-                  index + 1
-                ))}
+                {dotContent}
               </div>
 
               {/* Connector Line */}
               {!isLast && (
                 <div
-                  className={`${isVertical ? 'w-0.5 min-h-[24px] mx-auto my-1' : 'flex-1 h-0.5 mx-2'}`}
-                  style={{
-                    backgroundColor: step.status === 'completed'
-                      ? 'var(--mars-color-success)'
-                      : 'var(--mars-color-border)',
-                  }}
+                  className={`${isVertical ? 'w-0.5 min-h-[24px] mx-auto my-1' : 'flex-1 h-0.5 mx-2'} rounded-full transition-colors duration-500`}
+                  style={{ backgroundColor: connectorColor }}
                 />
               )}
             </div>
 
             {/* Label */}
             <div
-              className={`${isVertical ? 'ml-3 pb-6' : 'mt-2 text-center'} ${onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed') ? 'cursor-pointer' : ''}`}
-              onClick={() => {
-                if (onStepClick && (step.status === 'completed' || step.status === 'active' || step.status === 'failed')) {
-                  onStepClick(index)
-                }
-              }}
+              className={`${isVertical ? 'ml-3 pb-6' : 'mt-2.5 text-center'} ${clickable ? 'cursor-pointer' : ''}`}
+              onClick={() => { if (clickable) onStepClick!(index) }}
             >
               <p
-                className={`${size === 'sm' ? 'text-xs' : 'text-sm'} font-medium`}
+                className={`${size === 'sm' ? 'text-xs' : 'text-sm'} font-medium transition-colors`}
                 style={{
-                  color: step.status === 'active'
+                  color: active
                     ? 'var(--mars-color-text)'
-                    : 'var(--mars-color-text-secondary)',
+                    : done
+                      ? 'var(--mars-color-text-secondary)'
+                      : 'var(--mars-color-text-tertiary)',
                 }}
               >
                 {step.label}
@@ -141,3 +118,4 @@ export default function Stepper({ steps, orientation = 'horizontal', size = 'md'
     </div>
   )
 }
+

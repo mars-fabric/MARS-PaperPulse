@@ -28,8 +28,8 @@ function AuthGate() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-950">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
+      <div className="h-full flex items-center justify-center" style={{ backgroundColor: 'var(--mars-color-bg)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--mars-color-primary)' }} />
       </div>
     )
   }
@@ -102,10 +102,7 @@ function PublicAuthLanding({
         {/* Navigation Bar */}
         <div className="mb-12 sm:mb-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
-            >
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-gradient shadow-glow-sm">
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -122,16 +119,19 @@ function PublicAuthLanding({
         {/* Main Content Grid */}
         <div className="grid items-start gap-6 md:grid-cols-[1.3fr_1fr] lg:gap-8">
           {/* Left: Hero Section */}
-          <section className="space-y-8">
+          <section className="space-y-8 mars-animate-in">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 rounded-full border px-3.5 py-2 backdrop-blur-sm"
               style={{
-                borderColor: 'rgba(59, 130, 246, 0.3)',
-                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                borderColor: 'rgba(99, 102, 241, 0.3)',
+                backgroundColor: 'rgba(99, 102, 241, 0.08)',
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3B82F6' }} />
-              <span className="text-xs font-medium" style={{ color: 'rgba(147, 197, 253, 1)' }}>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping" style={{ backgroundColor: '#818CF8' }} />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ backgroundColor: '#6366F1' }} />
+              </span>
+              <span className="text-xs font-medium" style={{ color: '#C7D2FE' }}>
                 Powered by Advanced AI
               </span>
             </div>
@@ -142,12 +142,7 @@ function PublicAuthLanding({
                 style={{ color: '#F9FAFB' }}
               >
                 From Data to{' '}
-                <span style={{
-                  background: 'linear-gradient(120deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}>
+                <span className="mars-gradient-text">
                   Research Papers
                 </span>
               </h2>
@@ -162,23 +157,14 @@ function PublicAuthLanding({
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 onClick={onSignIn}
-                className="group flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg text-sm font-semibold text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg"
-                style={{
-                  background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.35)',
-                }}
+                className="mars-focus-ring group flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold text-white bg-brand-gradient shadow-glow transition-all duration-300 ease-mars hover:-translate-y-0.5 hover:shadow-glow active:translate-y-0"
               >
                 <span>Sign In</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
               <button
                 onClick={onSignUp}
-                className="flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg text-sm font-semibold transition-all duration-200"
-                style={{
-                  color: '#F9FAFB',
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                }}
+                className="mars-focus-ring flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 border border-white/15 bg-white/[0.06] hover:bg-white/[0.12] hover:border-white/25"
               >
                 <span>Create Account</span>
               </button>
@@ -216,7 +202,7 @@ function PublicAuthLanding({
                 return (
                   <div
                     key={idx}
-                    className="p-4 rounded-lg border backdrop-blur-sm group hover:border-opacity-100 transition-all"
+                    className="mars-hover-lift p-4 rounded-xl border backdrop-blur-sm group"
                     style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.03)',
                       borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -224,9 +210,9 @@ function PublicAuthLanding({
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 transition-transform duration-200 group-hover:scale-110"
                         style={{
-                          backgroundColor: `${feature.color}15`,
+                          backgroundColor: `${feature.color}1F`,
                         }}
                       >
                         <FeatureIcon className="w-4 h-4" style={{ color: feature.color }} />
@@ -247,9 +233,9 @@ function PublicAuthLanding({
           </section>
 
           {/* Right: Auth Card */}
-          <section>
+          <section className="mars-animate-in mars-delay-2">
             <div
-              className="rounded-xl border shadow-2xl overflow-hidden backdrop-blur-xl sticky top-6"
+              className="rounded-2xl border shadow-2xl overflow-hidden backdrop-blur-xl sticky top-6"
               style={{
                 backgroundColor: 'rgba(20, 28, 47, 0.7)',
                 borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -284,22 +270,13 @@ function PublicAuthLanding({
                 <div className="space-y-3">
                   <button
                     onClick={onSignIn}
-                    className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:shadow-lg"
-                    style={{
-                      background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-                      boxShadow: '0 4px 16px rgba(99, 102, 241, 0.25)',
-                    }}
+                    className="mars-focus-ring w-full py-3 rounded-xl text-sm font-semibold text-white bg-brand-gradient shadow-glow-sm transition-all duration-200 ease-mars hover:-translate-y-0.5 hover:shadow-glow active:translate-y-0"
                   >
                     Sign In
                   </button>
                   <button
                     onClick={onSignUp}
-                    className="w-full py-3 rounded-lg text-sm font-semibold border transition-all duration-200"
-                    style={{
-                      color: '#F9FAFB',
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                      borderColor: 'rgba(255, 255, 255, 0.15)',
-                    }}
+                    className="mars-focus-ring w-full py-3 rounded-xl text-sm font-semibold text-white border border-white/15 bg-white/[0.05] transition-all duration-200 hover:bg-white/[0.10] hover:border-white/25"
                   >
                     Create New Account
                   </button>
@@ -355,15 +332,7 @@ function PublicAuthLanding({
             { label: '∞', desc: 'Scalable' },
           ].map((stat, idx) => (
             <div key={idx} className="text-center">
-              <div
-                className="text-2xl sm:text-3xl font-bold"
-                style={{
-                  background: 'linear-gradient(120deg, #8b5cf6, #6366f1)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
+              <div className="text-2xl sm:text-3xl font-bold mars-gradient-text">
                 {stat.label}
               </div>
               <p className="text-xs sm:text-sm mt-2" style={{ color: 'rgba(156, 163, 175, 1)' }}>
@@ -384,7 +353,7 @@ function MainApp() {
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [showTask, setShowTask] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const { width, startResizing, containerRef } = useResizableSidebar()
+  const { width, startResizing, containerRef, isResizing } = useResizableSidebar()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Auto-collapse sidebar on small screens
@@ -480,7 +449,7 @@ function MainApp() {
         {/* Right Sidebar - with resizable container */}
         <div
           ref={containerRef}
-          className="transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0"
+          className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           style={{ 
             width: sidebarOpen ? `${width}px` : '0px', 
             minWidth: sidebarOpen ? `${width}px` : '0px',

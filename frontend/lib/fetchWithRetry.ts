@@ -26,7 +26,10 @@ async function refreshAccessToken(): Promise<string | null> {
 
 function buildInit(options: RequestInit | undefined, token: string | null): RequestInit {
   const headers = new Headers(options?.headers ?? {})
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  // For FormData bodies the browser must set `Content-Type` itself so the
+  // multipart boundary is included — forcing application/json corrupts uploads.
+  const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
+  if (!isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
   headers.set('traceparent', generateTraceparent())
   return { ...options, headers }

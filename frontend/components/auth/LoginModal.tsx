@@ -75,19 +75,25 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
         role="dialog"
         aria-modal="true"
         aria-labelledby="login-title"
-        className="relative w-full max-w-md rounded-xl shadow-2xl bg-gray-900 border border-gray-700/60 flex flex-col"
+        className="relative w-full max-w-md rounded-mars-lg shadow-mars-xl flex flex-col
+          animate-[mars-scale-in_var(--mars-duration-normal)_var(--mars-ease-standard)]"
+        style={{
+          backgroundColor: 'var(--mars-color-surface-raised)',
+          border: '1px solid var(--mars-color-border)',
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
           <div>
-            <h2 id="login-title" className="text-xl font-semibold text-white">
+            <h2 id="login-title" className="text-xl font-semibold" style={{ color: 'var(--mars-color-text)' }}>
               Sign in
             </h2>
-            <p className="mt-0.5 text-sm text-gray-400">Welcome back to MARS PaperPulse</p>
+            <p className="mt-0.5 text-sm" style={{ color: 'var(--mars-color-text-secondary)' }}>Welcome back to MARS PaperPulse</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="mars-focus-ring p-1.5 rounded-mars-md transition-colors hover:bg-[var(--mars-color-bg-hover)] hover:text-[var(--mars-color-text)]"
+            style={{ color: 'var(--mars-color-text-tertiary)' }}
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -98,11 +104,11 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
         <form onSubmit={handleSubmit} noValidate className="px-6 py-6 flex flex-col gap-4">
           {/* Email */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="login-email" className="text-sm font-medium text-gray-300">
+            <label htmlFor="login-email" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
               Email address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 ref={emailRef}
                 id="login-email"
@@ -112,21 +118,18 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700
-                  text-white placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors"
+                className="mars-input w-full pl-10 pr-4 py-2.5 rounded-mars-md text-sm transition-colors"
               />
             </div>
           </div>
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="login-password" className="text-sm font-medium text-gray-300">
+            <label htmlFor="login-password" className="text-sm font-medium" style={{ color: 'var(--mars-color-text-secondary)' }}>
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--mars-color-text-tertiary)' }} />
               <input
                 id="login-password"
                 type="password"
@@ -135,17 +138,21 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700
-                  text-white placeholder-gray-500 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                  transition-colors"
+                className="mars-input w-full pl-10 pr-4 py-2.5 rounded-mars-md text-sm transition-colors"
               />
             </div>
           </div>
 
           {/* Error banner */}
           {error && (
-            <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300 text-sm">
+            <div
+              className="flex items-start gap-2.5 px-4 py-3 rounded-mars-md text-sm"
+              style={{
+                backgroundColor: 'var(--mars-color-danger-subtle)',
+                border: '1px solid color-mix(in srgb, var(--mars-color-danger) 40%, transparent)',
+                color: 'var(--mars-color-danger)',
+              }}
+            >
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -155,12 +162,11 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
           <button
             type="submit"
             disabled={loading || !email.trim() || !password}
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg
-              text-sm font-semibold text-white
-              bg-gradient-to-r from-violet-600 to-indigo-600
-              hover:from-violet-500 hover:to-indigo-500
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-150 shadow-lg shadow-violet-900/30"
+            className="mars-focus-ring flex items-center justify-center gap-2 w-full py-2.5 rounded-mars-md
+              text-sm font-semibold text-white bg-brand-gradient shadow-glow-sm
+              hover:-translate-y-px hover:shadow-glow active:translate-y-0
+              disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0
+              transition-all duration-mars-fast ease-mars"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -172,11 +178,12 @@ export default function LoginModal({ open, onClose, onSwitchToSignup }: LoginMod
         </form>
 
         {/* Footer */}
-        <div className="px-6 pb-6 text-center text-sm text-gray-400">
+        <div className="px-6 pb-6 text-center text-sm" style={{ color: 'var(--mars-color-text-secondary)' }}>
           Don&apos;t have an account?{' '}
           <button
             onClick={() => { setError(null); onSwitchToSignup() }}
-            className="text-violet-400 hover:text-violet-300 font-medium underline underline-offset-2 transition-colors"
+            className="font-medium underline underline-offset-2 transition-colors hover:opacity-80"
+            style={{ color: 'var(--mars-color-primary-text)' }}
           >
             Sign up
           </button>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { getApiUrl, getWsUrl, config } from '@/lib/config'
+import { getWsUrl, config, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '@/lib/config'
 import { apiFetchWithRetry } from '@/lib/fetchWithRetry'
 import type {
   DeepresearchTaskState,
@@ -383,6 +383,18 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
   }, [apiFetch])
 
   const uploadFile = useCallback(async (file: File) => {
+    // Client-side size guard — fail fast so oversize files don't stream a huge
+    // body through the proxy only to be rejected (which surfaces as a slow 500).
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadedFiles(prev => [...prev, {
+        name: file.name,
+        size: file.size,
+        status: 'error' as const,
+        error: `File is too large (max ${MAX_UPLOAD_MB}MB)`,
+      }])
+      return
+    }
+
     const entry: UploadedFile = {
       name: file.name,
       size: file.size,
@@ -408,11 +420,14 @@ export function useDeepresearchTask(): UseDeepresearchTaskReturn {
     formData.append('subfolder', 'input_files')
 
     try {
-      const resp = await fetch(getApiUrl('/api/files/upload'), {
+      const resp = await apiFetchWithRetry('/api/files/upload', {
         method: 'POST',
         body: formData,
       })
-      if (!resp.ok) throw new Error('Upload failed')
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({ detail: resp.statusText }))
+        throw new Error(body.detail || `Upload failed (HTTP ${resp.status})`)
+      }
       const data = await resp.json()
       setUploadedFiles(prev =>
         prev.map(f => f.name === file.name ? { ...f, status: 'done' as const, path: data.path } : f)

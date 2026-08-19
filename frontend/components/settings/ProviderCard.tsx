@@ -197,11 +197,8 @@ export default function ProviderCard({
         ) : (
           <button
             onClick={() => setEditing(true)}
-            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white transition-all
-              hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-            style={{
-              background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-            }}
+            className="mars-focus-ring px-3 py-1.5 rounded-mars-md text-[11px] font-semibold text-white transition-all
+              bg-brand-gradient shadow-glow-sm hover:-translate-y-px hover:shadow-glow active:translate-y-0"
           >
             Configure
           </button>

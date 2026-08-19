@@ -6,99 +6,96 @@ export default function SimpleDashboardLanding({ onNewSession }: { onNewSession:
 
   return (
     <div
-      className="h-full w-full flex flex-col items-center justify-center px-4 py-8"
-      style={{
-        background: `
-          radial-gradient(1200px 600px at 20% 0%, rgba(99, 102, 241, 0.1) 0%, transparent 40%),
-          linear-gradient(135deg, #0F172A 0%, #111827 50%, #0B1220 100%)
-        `,
-        minHeight: '100vh',
-      }}
+      className="relative h-full w-full flex flex-col items-center justify-center px-4 py-8 overflow-hidden"
+      style={{ backgroundColor: 'var(--mars-color-bg)' }}
     >
-      <div className="max-w-md w-full space-y-8 text-center">
+      {/* Ambient brand glow — theme-aware, sits above the token background */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(900px 480px at 50% -10%, var(--mars-color-primary-subtle) 0%, transparent 55%),
+            radial-gradient(700px 400px at 85% 110%, rgba(139, 92, 246, 0.10) 0%, transparent 50%)
+          `,
+        }}
+      />
+
+      <div className="relative max-w-md w-full space-y-8 text-center">
         {/* Icon */}
-        <div className="flex justify-center">
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg"
-            style={{
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-            }}
-          >
+        <div className="flex justify-center mars-animate-scale-in">
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-brand-gradient shadow-glow">
             <Sparkles className="w-10 h-10 text-white" />
           </div>
         </div>
 
         {/* Title & Subtitle */}
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold" style={{ color: '#F9FAFB' }}>
-            PaperPulse
+        <div className="space-y-3 mars-animate-in mars-delay-1">
+          <h1 className="text-4xl font-bold tracking-tight" style={{ color: 'var(--mars-color-text)' }}>
+            Paper<span className="mars-gradient-text">Pulse</span>
           </h1>
-          <p className="text-base leading-relaxed" style={{ color: 'rgba(156, 163, 175, 1)' }}>
+          <p className="text-base leading-relaxed" style={{ color: 'var(--mars-color-text-secondary)' }}>
             Generate deep scientific research papers through AI-powered interactive stages
           </p>
         </div>
 
         {/* CTA Button */}
-        <button
-          onClick={onNewSession}
-          className="w-full py-3.5 rounded-lg text-sm font-semibold text-white transition-all duration-300 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-            boxShadow: '0 8px 24px rgba(99, 102, 241, 0.3)',
-          }}
-        >
-          <span className="flex items-center justify-center gap-2">
-            <FileText className="w-4 h-4" />
-            Start New Research
-          </span>
-        </button>
+        <div className="mars-animate-in mars-delay-2">
+          <button
+            onClick={onNewSession}
+            className="mars-focus-ring w-full py-3.5 rounded-mars-lg text-sm font-semibold text-white
+              bg-brand-gradient shadow-glow-sm transition-all duration-mars-normal ease-mars
+              hover:-translate-y-0.5 hover:shadow-glow active:translate-y-0"
+          >
+            <span className="flex items-center justify-center gap-2">
+              <FileText className="w-4 h-4" />
+              Start New Research
+            </span>
+          </button>
+        </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-3 gap-4 pt-8">
+        <div className="grid grid-cols-3 gap-4 pt-8 mars-animate-in mars-delay-3">
           {[
             {
               icon: Upload,
               title: 'Upload Data',
               desc: 'CSV, PDF, Text files',
-              color: '#00D4FF',
+              color: '#22D3EE',
             },
             {
               icon: Sparkles,
               title: 'AI Stages',
               desc: '4-phase pipeline',
-              color: '#8b5cf6',
+              color: '#8B5CF6',
             },
             {
               icon: FileText,
               title: 'LaTeX Paper',
               desc: 'Publication ready',
-              color: '#51CF66',
+              color: '#22C55E',
             },
           ].map((feature, idx) => {
             const FeatureIcon = feature.icon
             return (
               <div
                 key={idx}
-                className="p-4 rounded-lg border transition-all hover:border-opacity-100"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
-                }}
+                className="mars-card-interactive p-4 group"
               >
                 <div className="flex flex-col items-center gap-3">
                   <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
+                    className="w-10 h-10 rounded-mars-md flex items-center justify-center transition-transform duration-mars-normal group-hover:scale-110"
                     style={{
-                      backgroundColor: `${feature.color}20`,
+                      backgroundColor: `${feature.color}1F`,
                     }}
                   >
                     <FeatureIcon className="w-5 h-5" style={{ color: feature.color }} />
                   </div>
                   <div>
-                    <h3 className="text-xs font-semibold" style={{ color: '#F9FAFB' }}>
+                    <h3 className="text-xs font-semibold" style={{ color: 'var(--mars-color-text)' }}>
                       {feature.title}
                     </h3>
-                    <p className="text-[10px] mt-1" style={{ color: 'rgba(107, 114, 128, 1)' }}>
+                    <p className="text-[10px] mt-1" style={{ color: 'var(--mars-color-text-tertiary)' }}>
                       {feature.desc}
                     </p>
                   </div>
@@ -111,3 +108,4 @@ export default function SimpleDashboardLanding({ onNewSession }: { onNewSession:
     </div>
   )
 }
+

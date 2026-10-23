@@ -18,7 +18,7 @@ export default function TopBar({ onNewSession, rightSlot }: TopBarProps) {
   return (
     <>
       <header
-        className="flex-shrink-0 border-b backdrop-blur-xl"
+        className="relative z-nav flex-shrink-0 border-b backdrop-blur-xl"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--mars-color-surface-raised) 85%, transparent)',
           borderColor: 'var(--mars-color-border)',
